@@ -1,95 +1,118 @@
-import Image from "next/image";
-import styles from "./page.module.css";
+"use client";
+
+import { useState } from 'react';
+import {
+  Box,
+  Button,
+  Container,
+  Heading,
+  Textarea,
+  VStack,
+  Spinner,
+} from '@chakra-ui/react';
+import { Toaster, toaster } from '@/components/ui/toaster';
+import { FileUpload, Icon } from '@chakra-ui/react';
+import { LuUpload } from 'react-icons/lu';
 
 export default function Home() {
-  return (
-    <div className={styles.page}>
-      <main className={styles.main}>
-        <Image
-          className={styles.logo}
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol>
-          <li>
-            Get started by editing <code>src/app/page.tsx</code>.
-          </li>
-          <li>Save and see your changes instantly.</li>
-        </ol>
+  const [file, setFile] = useState<File | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [markdownResult, setMarkdownResult] = useState([]);
 
-        <div className={styles.ctas}>
-          <a
-            className={styles.primary}
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setFile(file);
+    }
+  };
+
+  const handleConvert = async () => {
+    if (!file) {
+      toaster.create({
+        title: 'No file selected',
+        type: 'error',
+        duration: 3000,
+      });
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const response = await fetch('/api/convert-to-markdown', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to convert PDF');
+      }
+
+      const data = await response.json();
+      setMarkdownResult(data.markdown || []);
+    } catch (error: unknown) {
+      if (error instanceof Error) {
+        toaster.create({
+          title: 'Conversion failed',
+          description: error.message,
+          type: 'error',
+          duration: 3000,
+        });
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <Container fluid={true} py={10}>
+      <Toaster />
+      <Container centerContent={true}>
+        <Heading mb={6}>PDF to Markdown & Dubbing Script</Heading>
+        <VStack gap={5}>
+          <FileUpload.Root
+            alignItems="stretch"
+            maxFiles={10}
+            onChange={handleFileChange}
           >
-            <Image
-              className={styles.logo}
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-            className={styles.secondary}
-          >
-            Read our docs
-          </a>
-        </div>
-      </main>
-      <footer className={styles.footer}>
-        <a
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
-    </div>
+            <FileUpload.HiddenInput />
+            <FileUpload.Dropzone>
+              <Icon size="md" color="fg.muted">
+                <LuUpload />
+              </Icon>
+              <FileUpload.DropzoneContent>
+                <Box>Drag and drop files here</Box>
+                <Box color="fg.muted">
+                  <b>.pdf</b> up to 5MB
+                </Box>
+              </FileUpload.DropzoneContent>
+            </FileUpload.Dropzone>
+            <FileUpload.List />
+          </FileUpload.Root>
+          <Button onClick={handleConvert} loading={isLoading} variant="surface">
+            Convert to Markdown
+          </Button>
+          {isLoading && <Spinner />}
+          {markdownResult.length > 0 && (
+            <Box>
+              <Heading size="md" mb={3}>
+                Markdown Output
+              </Heading>
+              {markdownResult.map((text, idx) => (
+                <Textarea
+                  key={idx}
+                  value={text}
+                  readOnly
+                  mb={4}
+                  height="200px"
+                />
+              ))}
+            </Box>
+          )}
+        </VStack>
+      </Container>
+    </Container>
   );
 }
