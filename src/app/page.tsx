@@ -5,26 +5,62 @@ import {
   Box,
   Button,
   Container,
-  Heading,
-  Textarea,
   VStack,
-  Spinner,
+  Flex,
+  Table,
+  HStack,
+  Progress,
+  Input,
+  Field,
+  Stack,
 } from '@chakra-ui/react';
 import { Toaster, toaster } from '@/components/ui/toaster';
 import { FileUpload, Icon } from '@chakra-ui/react';
-import { LuUpload } from 'react-icons/lu';
+import { LuDownload, LuUpload } from 'react-icons/lu';
+import PDFDriver, { PDFDocument } from '../lib/scanner';
+import Timer from '@/components/ui/timer';
+import { Line } from '@/lib/types';
+
+const scanner = new PDFDriver();
 
 export default function Home() {
   const [file, setFile] = useState<File | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [markdownResult, setMarkdownResult] = useState([]);
+  const [lines, setLines] = useState<Line[]>([]);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(0);
+  const [pdf, setPdf] = useState<PDFDocument | null>(null);
+  const [endPage, setEndPage] = useState(0);
+  const [currentPageThumbnail, setCurrentPageThumbnail] = useState<Blob | null>(null);
+  const [isDone, setIsDone] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      const pdf = await scanner.read(file);
       setFile(file);
+      setPdf(pdf);
+      setTotalPages(pdf.proxy.numPages);
+      setEndPage(pdf.proxy.numPages);
+      setCurrentPageThumbnail(await (await scanner.readPage(file, 1)).scan());
     }
   };
+
+  const showPage = async (page: number) => {
+
+    if (!file) {
+      toaster.create({
+        title: 'No file selected',
+        type: 'error',
+        duration: 3000,
+      });
+      return;
+    }
+
+    setCurrentPageThumbnail(await (await scanner.readPage(file, page)).scan());
+
+  }
 
   const handleConvert = async () => {
     if (!file) {
@@ -38,20 +74,29 @@ export default function Home() {
 
     setIsLoading(true);
     try {
-      const formData = new FormData();
-      formData.append('file', file);
 
-      const response = await fetch('/api/convert-to-markdown', {
-        method: 'POST',
-        body: formData,
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to convert PDF');
+      if (!pdf) {
+        throw new Error('PDF not loaded');
       }
 
-      const data = await response.json();
-      setMarkdownResult(data.markdown || []);
+      setIsProcessing(true);
+
+      let _currentPage = currentPage;
+
+      for await (const page of pdf.range(currentPage, endPage)) {
+        const formData = new FormData();
+        const image = await page.scan();
+        setCurrentPageThumbnail(image);
+        formData.append('image', image);
+        const response = await fetch(`/api/sheetify?pageNumber=${_currentPage}`, { method: 'POST', body: formData });
+        const data: { result: Line[] } = await response.json();
+        setLines((lines) => [...lines, ...data.result]);
+        setCurrentPage((currentPage) => currentPage + 1);
+        _currentPage += 1;
+      }
+
+      setIsDone(true);
+
     } catch (error: unknown) {
       if (error instanceof Error) {
         toaster.create({
@@ -66,19 +111,104 @@ export default function Home() {
     }
   };
 
+  const handleDownload = async () => {
+    if (lines.length === 0) {
+      return;
+    }
+    
+    const filename = 'lines.csv';
+    const headers = ['الشخصية', 'النص', 'النبرة', 'المكان', 'الخلفية الصوتية', 'رقم الصفحة'];
+    
+    const csvContent = lines.map(line =>
+      headers.map(header => 
+        JSON.stringify((line as any)[header] ?? '') // safer mapping
+      ).join(',')
+    );
+    
+    const csvContentWithHeaders = [headers.join(','), ...csvContent].join('\n');
+    
+    // Add UTF-8 BOM
+    const BOM = '\uFEFF'; // <-- Important for UTF-8
+    
+    const blob = new Blob([BOM + csvContentWithHeaders], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    link.click();
+  };
+
   return (
-    <Container fluid={true} py={10}>
+    <Container fluid py={10} height={'100vh'} width={'100vw'} centerContent={true}>
       <Toaster />
-      <Container centerContent={true}>
-        <Heading mb={6}>PDF to Markdown & Dubbing Script</Heading>
-        <VStack gap={5}>
-          <FileUpload.Root
+      <HStack height={'100%'} width={'100%'} gap={5} alignItems={'stretch'}>
+        <VStack gap={5} width={'80%'}> 
+          <Table.ScrollArea height={'100%'} width={'100%'} p={0}>
+            <Table.Root striped dir="rtl" stickyHeader>
+              <Table.Header>
+                <Table.Row>
+                  <Table.ColumnHeader>رقم الصفحة</Table.ColumnHeader>
+                  <Table.ColumnHeader>رقم النص</Table.ColumnHeader>
+                  <Table.ColumnHeader>الشخصية</Table.ColumnHeader>
+                  <Table.ColumnHeader>النص</Table.ColumnHeader>
+                  <Table.ColumnHeader>النبرة</Table.ColumnHeader>
+                  <Table.ColumnHeader>المكان</Table.ColumnHeader>
+                  <Table.ColumnHeader>الخلفية الصوتية</Table.ColumnHeader>
+                </Table.Row>
+              </Table.Header>
+              <Table.Body>
+                {lines.map((line, index) => (
+                  <Table.Row key={index}>
+                    <Table.Cell minWidth={"2vw"} whiteSpace={"wrap"}>{line['رقم الصفحة']}</Table.Cell>
+                    <Table.Cell minWidth={"2vw"} whiteSpace={"wrap"}>{line['رقم النص']}</Table.Cell>
+                    <Table.Cell minWidth={"2vw"} whiteSpace={"wrap"}>{line['الشخصية']}</Table.Cell>
+                    <Table.Cell minWidth={"20vw"} whiteSpace={"wrap"}>{line['النص']}</Table.Cell>
+                    <Table.Cell minWidth={"20vw"} whiteSpace={"wrap"}>{line['النبرة']}</Table.Cell>
+                    <Table.Cell minWidth={"20vw"} whiteSpace={"wrap"}>{line['المكان']}</Table.Cell>
+                    <Table.Cell minWidth={"20vw"} whiteSpace={"wrap"}>{line['الخلفية الصوتية']}</Table.Cell>
+                  </Table.Row>
+                ))}
+              </Table.Body>
+            </Table.Root> 
+          </Table.ScrollArea>
+          { totalPages > 0 && 
+            <HStack gap={5} width={'100%'} height={'3em'} justifyContent={'space-between'}>
+              <Flex>
+                <Progress.Root defaultValue={0} width="md" max={100}>
+                  <HStack gap="5">
+                    <Progress.Label>{currentPage}/{totalPages}</Progress.Label>
+                    <Progress.Track flex="1">
+                      <Progress.Range />
+                    </Progress.Track>
+                    <Progress.ValueText>{Math.round(currentPage / totalPages * 100)}%</Progress.ValueText>
+                  </HStack>
+                </Progress.Root>
+              </Flex>
+              <Box>
+                { isDone && <Button variant="surface" onClick={handleDownload}>
+                  <span>تنزيل الجدول</span>
+                  <Icon size="md" color="fg.muted">
+                    <LuDownload />
+                  </Icon>
+                </Button> }
+                <Timer running={isProcessing}></Timer>
+              </Box>
+            </HStack>
+          }
+        </VStack>
+        <VStack gap={5} width={'20%'} height={'100%'} justifyContent={'space-between'}>
+          {currentPageThumbnail == null && <FileUpload.Root
+            accept={["application/pdf"]}
             alignItems="stretch"
+            flexGrow={1}
             maxFiles={10}
             onChange={handleFileChange}
+            width={'20vw'}
+            height={'65vh'}
           >
             <FileUpload.HiddenInput />
-            <FileUpload.Dropzone>
+            <FileUpload.Dropzone flexGrow={1}>
               <Icon size="md" color="fg.muted">
                 <LuUpload />
               </Icon>
@@ -89,30 +219,29 @@ export default function Home() {
                 </Box>
               </FileUpload.DropzoneContent>
             </FileUpload.Dropzone>
-            <FileUpload.List />
-          </FileUpload.Root>
-          <Button onClick={handleConvert} loading={isLoading} variant="surface">
-            Convert to Markdown
+          </FileUpload.Root> }
+          {currentPageThumbnail != null && <img src={URL.createObjectURL(currentPageThumbnail)} style={{minWidth: '20vw', minHeight: '65vh'}} alt="current page thumbnail" width={'20vw'} height={'65vh'} />}
+          <Button onClick={handleConvert} loading={isLoading} variant="surface" width={'100%'}>
+            فرغ النص
           </Button>
-          {isLoading && <Spinner />}
-          {markdownResult.length > 0 && (
-            <Box>
-              <Heading size="md" mb={3}>
-                Markdown Output
-              </Heading>
-              {markdownResult.map((text, idx) => (
-                <Textarea
-                  key={idx}
-                  value={text}
-                  readOnly
-                  mb={4}
-                  height="200px"
-                />
-              ))}
-            </Box>
-          )}
+          { totalPages > 0 &&
+            <HStack dir="rtl" gap={5} width={'20vw'} justifyContent={'space-between'}>
+                <Field.Root>
+                  <Field.Label>
+                    الصفحة الحالية
+                  </Field.Label>
+                  <Input type="number" min="1" max={totalPages} value={currentPage} onChange={(e) => (setCurrentPage(Number(e.target.value)), showPage(Number(e.target.value)))} />
+                </Field.Root>
+                <Field.Root>
+                  <Field.Label>
+                    صفحة النهاية
+                  </Field.Label>
+                  <Input type="number" min="1" max={totalPages} value={endPage} onChange={(e) => setEndPage(Number(e.target.value))} />
+                </Field.Root>
+              </HStack>
+          }
         </VStack>
-      </Container>
+      </HStack>
     </Container>
   );
 }
