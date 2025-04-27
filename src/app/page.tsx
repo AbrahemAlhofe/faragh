@@ -86,7 +86,7 @@ export default function Home() {
 
       const formData = new FormData();
       formData.append('pdf', file);
-      const { sheetUrl }: { sheetUrl: string } = await fetch(`/api/sheetify`, { method: 'POST', body: formData }).then(res => res.json());
+      const { sheetUrl }: { sheetUrl: string } = await fetch(`/api/sheetify?startPage=${currentPage}&endPage=${endPage}`, { method: 'POST', body: formData }).then(res => res.json());
       
       setSheetUrl(sheetUrl);
 

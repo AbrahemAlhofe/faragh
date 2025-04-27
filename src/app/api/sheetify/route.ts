@@ -33,35 +33,41 @@ async function convertToImage (canvasFactory: any, page: PDFPageProxy) {
 
 async function parsePage (image: Buffer): Promise<Omit<Line, 'رقم الصفحة' | 'رقم النص'>[]> {
   
-  const { text: content } = await generateText({
-    model: LLM_MODEL,
-    messages: [
-        {
-          role: 'user',
-          content: [
-            { type: 'text', text: 'Convert the following image to markdown directly without \'markdown```\' annotation:' },
-            { type: 'image', image: image }
-          ],
-        },
-    ],
-  });
+  try {
 
-  const { object: lines } = await generateObject({
-    model: LLM_MODEL,
-    schema: z.array(z.object({
-      ['الشخصية']: z.string(),
-      ['النص']: z.string(),
-      ['النبرة']: z.string(),
-      ['المكان']: z.string(),
-      ['الخلفية الصوتية']: z.string(),
-    })),
-    system: await fs.readFile(path.join('src/lib/prompts', 'sheetify.md'), 'utf-8'),
-    messages: [
-        { role: 'user', content },
-    ],
-  });
-
-  return lines;
+    const { text: content } = await generateText({
+      model: LLM_MODEL,
+      messages: [
+          {
+            role: 'user',
+            content: [
+              { type: 'text', text: 'Convert the following image to markdown directly without \'markdown```\' annotation:' },
+              { type: 'image', image: image }
+            ],
+          },
+      ],
+    });
+  
+    const { object: lines } = await generateObject({
+      model: LLM_MODEL,
+      schema: z.array(z.object({
+        ['الشخصية']: z.string(),
+        ['النص']: z.string(),
+        ['النبرة']: z.string(),
+        ['المكان']: z.string(),
+        ['الخلفية الصوتية']: z.string(),
+      })),
+      system: await fs.readFile(path.join('src/lib/prompts', 'sheetify.md'), 'utf-8'),
+      messages: [
+          { role: 'user', content },
+      ],
+    });
+  
+    return lines;
+  } catch (error) {
+    console.error('Error parsing page');
+    return [];
+  }
 
 }
 
@@ -69,6 +75,8 @@ export async function POST(req: NextRequest) {
 
   try {
 
+    const startPage = parseInt(req.nextUrl.searchParams.get('startPage') || '1', 10);
+    const endPage = parseInt(req.nextUrl.searchParams.get('endPage') || '1', 10);
     const sheetId = Math.random().toString(36).substring(2, 15);
     let sheet: Line[] = [];
     const contentType = req.headers.get('content-type') || '';
@@ -89,7 +97,7 @@ export async function POST(req: NextRequest) {
     const requests: Promise<void>[] = [];
     let processedPages = 0;
 
-    for (let pageNumber = 1; pageNumber <= document.numPages; pageNumber++) {
+    for (let pageNumber = startPage; pageNumber <= document.numPages; pageNumber++) {
 
       const _pageNumber = pageNumber;
 
@@ -100,7 +108,7 @@ export async function POST(req: NextRequest) {
         const lines = await parsePage(image);
         sheet.push(...lines.map((line, index) => ({ ...line, ['رقم الصفحة']: page.pageNumber, ['رقم النص']: index + 1 })));
         processedPages += 1;
-        console.log(`Progress : ${Math.round((processedPages / document.numPages) * 100)}%`);
+        console.log(`Page: ${page.pageNumber} | Progress : ${Math.round((processedPages / document.numPages) * 100)}%`);
         resolve();
       }));
 

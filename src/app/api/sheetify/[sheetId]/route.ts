@@ -5,8 +5,8 @@ import { NextRequest } from "next/server";
 
 const redis = new Redis(process.env.REDIS_URL || "redis://localhost:6379");
 
-export async function GET(req: NextRequest, { params }: { params: { sheetId: string } }) {
-  const { sheetId } = params;
+export async function GET(req: NextRequest, { params }: { params: Promise<{ sheetId: string }> }) {
+  const { sheetId } = await params;
 
   if (!sheetId) {
     return new Response(JSON.stringify({ error: "No sheetId provided" }), {
