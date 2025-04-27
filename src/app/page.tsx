@@ -17,7 +17,7 @@ import {
 import { Toaster, toaster } from '@/components/ui/toaster';
 import { FileUpload, Icon } from '@chakra-ui/react';
 import { LuDownload, LuUpload } from 'react-icons/lu';
-import PDFDriver, { PDFDocument } from '../lib/scanner';
+import PDFDriver, { PDFDocument } from '../lib/pdfDriver';
 import Timer from '@/components/ui/timer';
 import { Line } from '@/lib/types';
 
