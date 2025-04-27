@@ -45,7 +45,7 @@ export default function Home() {
       setTotalPages(pdf.proxy.numPages);
       setEndPage(pdf.proxy.numPages);
       setIsLoading(true);
-      setCurrentPageThumbnail(await (await scanner.readPage(file, 1)).scan());
+      // setCurrentPageThumbnail(await (await scanner.readPage(file, 1)).scan());
       setIsLoading(false);
     }
   };
@@ -61,7 +61,7 @@ export default function Home() {
       return;
     }
 
-    setCurrentPageThumbnail(await (await scanner.readPage(file, page)).scan());
+    // setCurrentPageThumbnail(await (await scanner.readPage(file, page)).scan());
 
   }
 
@@ -173,7 +173,7 @@ export default function Home() {
           { totalPages > 0 && 
             <HStack gap={5} width={'100%'} height={'3em'} justifyContent={'space-between'}>
               <Flex>
-                <Progress.Root defaultValue={0} width="md" max={100}>
+                <Progress.Root width="md" max={100} value={currentPage / totalPages * 100}>
                   <HStack gap="5">
                     <Progress.Label>{currentPage}/{totalPages}</Progress.Label>
                     <Progress.Track flex="1">
@@ -218,7 +218,7 @@ export default function Home() {
               </FileUpload.DropzoneContent>
             </FileUpload.Dropzone>
           </FileUpload.Root> }
-          {currentPageThumbnail != null && <img src={URL.createObjectURL(currentPageThumbnail)} style={{minWidth: '20vw', minHeight: '65vh', objectFit: 'contain'}} alt="current page thumbnail" width={'20vw'} height={'65vh'} />}
+          {currentPageThumbnail != null && <img style={{minWidth: '20vw', minHeight: '65vh', objectFit: 'contain'}} alt="current page thumbnail" width={'20vw'} height={'65vh'} />}
           <Button onClick={handleConvert} loading={isLoading} variant="surface" width={'100%'}>
             فرغ النص
           </Button>

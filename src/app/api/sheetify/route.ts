@@ -32,7 +32,7 @@ async function convertToImage (canvasFactory: any, page: PDFPageProxy) {
 }
 
 async function parsePage (image: Buffer): Promise<Omit<Line, 'رقم الصفحة' | 'رقم النص'>[]> {
-
+  
   const { text: content } = await generateText({
     model: LLM_MODEL,
     messages: [
