@@ -31,7 +31,7 @@ async function convertToImage (canvasFactory: any, page: PDFPageProxy) {
   return canvasAndContext.canvas.toBuffer("image/png");
 }
 
-async function parsePage (image: Buffer) {
+async function parsePage (image: Buffer): Promise<Omit<Line, 'رقم الصفحة' | 'رقم النص'>[]> {
 
   const { text: content } = await generateText({
     model: LLM_MODEL,
@@ -87,6 +87,7 @@ export async function POST(req: NextRequest) {
     const uint8Array = new Uint8Array(arrayBuffer);
     const document = await getDocument({ data: uint8Array }).promise;
     const requests: Promise<void>[] = [];
+    let processedPages = 0;
 
     for (let pageNumber = 1; pageNumber <= document.numPages; pageNumber++) {
 
@@ -98,8 +99,9 @@ export async function POST(req: NextRequest) {
         const image = await convertToImage(canvasFactory, page);
         const lines = await parsePage(image);
         sheet.push(...lines.map((line, index) => ({ ...line, ['رقم الصفحة']: page.pageNumber, ['رقم النص']: index + 1 })));
+        processedPages += 1;
+        console.log(`Progress : ${Math.round((processedPages / document.numPages) * 100)}%`);
         resolve();
-        console.log(`Page ${page.pageNumber} processed`);
       }));
 
     }
