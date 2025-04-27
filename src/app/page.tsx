@@ -27,13 +27,14 @@ export default function Home() {
   const [file, setFile] = useState<File | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [lines, setLines] = useState<Line[]>([]);
-  const [currentPage, setCurrentPage] = useState(1);
+  const [currentPage, setCurrentPage] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
   const [pdf, setPdf] = useState<PDFDocument | null>(null);
   const [endPage, setEndPage] = useState(0);
   const [currentPageThumbnail, setCurrentPageThumbnail] = useState<Blob | null>(null);
   const [isDone, setIsDone] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [sheetUrl, setSheetUrl] = useState<string | null>(null);
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -43,7 +44,9 @@ export default function Home() {
       setPdf(pdf);
       setTotalPages(pdf.proxy.numPages);
       setEndPage(pdf.proxy.numPages);
+      setIsLoading(true);
       setCurrentPageThumbnail(await (await scanner.readPage(file, 1)).scan());
+      setIsLoading(false);
     }
   };
 
@@ -81,19 +84,25 @@ export default function Home() {
 
       setIsProcessing(true);
 
-      let _currentPage = currentPage;
+      const formData = new FormData();
+      formData.append('pdf', file);
+      const { sheetUrl }: { sheetUrl: string } = await fetch(`/api/sheetify`, { method: 'POST', body: formData }).then(res => res.json());
+      
+      setSheetUrl(sheetUrl);
 
-      for await (const page of pdf.range(currentPage, endPage)) {
-        const formData = new FormData();
-        const image = await page.scan();
-        setCurrentPageThumbnail(image);
-        formData.append('image', image);
-        const response = await fetch(`/api/sheetify?pageNumber=${_currentPage}`, { method: 'POST', body: formData });
-        const data: { result: Line[] } = await response.json();
-        setLines((lines) => [...lines, ...data.result]);
-        setCurrentPage((currentPage) => currentPage + 1);
-        _currentPage += 1;
-      }
+      // let _currentPage = currentPage;
+
+      // for await (const page of pdf.range(currentPage, endPage)) {
+      //   const formData = new FormData();
+      //   const image = await page.scan();
+      //   setCurrentPageThumbnail(image);
+      //   formData.append('image', image);
+      //   const response = await fetch(`/api/sheetify?pageNumber=${_currentPage}`, { method: 'POST', body: formData });
+      //   const data: { result: Line[] } = await response.json();
+      //   setLines((lines) => [...lines, ...data.result]);
+      //   setCurrentPage((currentPage) => currentPage + 1);
+      //   _currentPage += 1;
+      // }
 
       setIsDone(true);
 
@@ -108,34 +117,23 @@ export default function Home() {
       }
     } finally {
       setIsLoading(false);
+      setIsProcessing(false);
     }
   };
 
   const handleDownload = async () => {
-    if (lines.length === 0) {
+    if (!sheetUrl) {
+      toaster.create({
+        title: 'No sheet URL available',
+        type: 'error',
+        duration: 3000,
+      });
       return;
     }
     
-    const filename = 'lines.csv';
-    const headers = ['الشخصية', 'النص', 'النبرة', 'المكان', 'الخلفية الصوتية', 'رقم الصفحة'];
-    
-    const csvContent = lines.map(line =>
-      headers.map(header => 
-        JSON.stringify((line as any)[header] ?? '') // safer mapping
-      ).join(',')
-    );
-    
-    const csvContentWithHeaders = [headers.join(','), ...csvContent].join('\n');
-    
-    // Add UTF-8 BOM
-    const BOM = '\uFEFF'; // <-- Important for UTF-8
-    
-    const blob = new Blob([BOM + csvContentWithHeaders], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    
     const link = document.createElement('a');
-    link.href = url;
-    link.download = filename;
+    link.href = sheetUrl;
+    link.download = file?.name.replace('.pdf', '.csv') || 'sheet.csv';
     link.click();
   };
 
@@ -185,7 +183,7 @@ export default function Home() {
                   </HStack>
                 </Progress.Root>
               </Flex>
-              <Box>
+              <HStack dir="rtl" gap={5}>
                 { isDone && <Button variant="surface" onClick={handleDownload}>
                   <span>تنزيل الجدول</span>
                   <Icon size="md" color="fg.muted">
@@ -193,7 +191,7 @@ export default function Home() {
                   </Icon>
                 </Button> }
                 <Timer running={isProcessing}></Timer>
-              </Box>
+              </HStack>
             </HStack>
           }
         </VStack>
@@ -220,7 +218,7 @@ export default function Home() {
               </FileUpload.DropzoneContent>
             </FileUpload.Dropzone>
           </FileUpload.Root> }
-          {currentPageThumbnail != null && <img src={URL.createObjectURL(currentPageThumbnail)} style={{minWidth: '20vw', minHeight: '65vh'}} alt="current page thumbnail" width={'20vw'} height={'65vh'} />}
+          {currentPageThumbnail != null && <img src={URL.createObjectURL(currentPageThumbnail)} style={{minWidth: '20vw', minHeight: '65vh', objectFit: 'contain'}} alt="current page thumbnail" width={'20vw'} height={'65vh'} />}
           <Button onClick={handleConvert} loading={isLoading} variant="surface" width={'100%'}>
             فرغ النص
           </Button>

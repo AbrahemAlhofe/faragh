@@ -7,3 +7,10 @@ export type Line = {
   ['رقم الصفحة']: number;
   ['رقم النص']: number;
 }
+
+export type Sheet = Line[];
+
+export type SheetFile = {
+  pdfFilename: string;
+  sheet: Sheet;
+}
