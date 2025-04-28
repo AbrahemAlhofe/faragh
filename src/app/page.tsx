@@ -12,7 +12,6 @@ import {
   Progress,
   Input,
   Field,
-  Stack,
 } from '@chakra-ui/react';
 import { Toaster, toaster } from '@/components/ui/toaster';
 import { FileUpload, Icon } from '@chakra-ui/react';
@@ -27,7 +26,7 @@ export default function Home() {
   const [file, setFile] = useState<File | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [lines, setLines] = useState<Line[]>([]);
-  const [currentPage, setCurrentPage] = useState(0);
+  const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(0);
   const [pdf, setPdf] = useState<PDFDocument | null>(null);
   const [endPage, setEndPage] = useState(0);
@@ -219,9 +218,9 @@ export default function Home() {
             </FileUpload.Dropzone>
           </FileUpload.Root> }
           {currentPageThumbnail != null && <img style={{minWidth: '20vw', minHeight: '65vh', objectFit: 'contain'}} alt="current page thumbnail" width={'20vw'} height={'65vh'} />}
-          <Button onClick={handleConvert} loading={isLoading} variant="surface" width={'100%'}>
+          { file != null && <Button onClick={handleConvert} loading={isLoading} variant="surface" width={'100%'}>
             فرغ النص
-          </Button>
+          </Button> }
           { totalPages > 0 &&
             <HStack dir="rtl" gap={5} width={'20vw'} justifyContent={'space-between'}>
                 <Field.Root>

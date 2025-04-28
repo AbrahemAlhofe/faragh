@@ -9,13 +9,15 @@ import '@ungap/with-resolvers';
 import { PDFPageProxy } from 'pdfjs-dist/types/web/interfaces';
 import Redis from 'ioredis';
 import { Line, SheetFile } from '@/lib/types';
+import Mustache from 'mustache';
+import Cache from '@/lib/cache';
+import sharp from 'sharp';
 
 const redis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379');
-const LLM_MODEL = google('gemini-2.5-flash-preview-04-17');
 
 async function convertToImage (canvasFactory: any, page: PDFPageProxy) {
   // Render the page on a Node canvas with 100% scale.
-  const viewport = page.getViewport({ scale: 0.5 });
+  const viewport = page.getViewport({ scale: 1 });
   const canvasAndContext = canvasFactory.create(
     viewport.width,
     viewport.height
@@ -28,28 +30,62 @@ async function convertToImage (canvasFactory: any, page: PDFPageProxy) {
   const renderTask = page.render(renderContext);
   await renderTask.promise;
 
-  return canvasAndContext.canvas.toBuffer("image/png");
+  const image = canvasAndContext.canvas.toBuffer("image/png");
+
+  await fs.writeFile(path.join('tmp', `${page.pageNumber}.png`), image, 'binary');
+
+  return image;
 }
 
-async function parsePage (image: Buffer): Promise<Omit<Line, 'رقم الصفحة' | 'رقم النص'>[]> {
-  
-  try {
+async function convertToMarkdown (image: Buffer): Promise<{ characters: Array<{ name: string, description: string }>, content: string }> {
 
+  try {
+    
     const { text: content } = await generateText({
-      model: LLM_MODEL,
+      model: google('gemini-2.5-flash-preview-04-17'),
+      system: await fs.readFile(path.join('src/lib/prompts', 'markdownify.md'), 'utf-8'),
       messages: [
           {
             role: 'user',
             content: [
-              { type: 'text', text: 'Convert the following image to markdown directly without \'markdown```\' annotation:' },
               { type: 'image', image: image }
             ],
           },
       ],
     });
-  
+
+    const { object: characters } = await generateObject({
+      model: google('gemini-2.5-flash-preview-04-17'),
+      system: await fs.readFile(path.join('src/lib/prompts', 'charactering.md'), 'utf-8'),
+      schema: z.array(z.object({
+          name: z.string(),
+          description: z.string(),
+      })),
+      messages: [
+          {
+            role: 'user',
+            content
+          },
+      ],
+    });
+
+    return { content, characters };
+
+  } catch (error) {
+    console.error('Error converting image to markdown');
+    return { characters: [], content: '' };
+  }
+
+}
+
+async function convertToLines(pageNumber: number, content: string, characters: string): Promise<Omit<Line, 'رقم الصفحة' | 'رقم النص'>[]> {
+
+  try {
+
+    const promptFile = await fs.readFile(path.join('src/lib/prompts', 'sheetify.md'), 'utf-8');
+    const prompt = Mustache.render(promptFile, { characters });
     const { object: lines } = await generateObject({
-      model: LLM_MODEL,
+      model: google('gemini-2.5-pro-preview-03-25'),
       schema: z.array(z.object({
         ['الشخصية']: z.string(),
         ['النص']: z.string(),
@@ -57,16 +93,20 @@ async function parsePage (image: Buffer): Promise<Omit<Line, 'رقم الصفح�
         ['المكان']: z.string(),
         ['الخلفية الصوتية']: z.string(),
       })),
-      system: await fs.readFile(path.join('src/lib/prompts', 'sheetify.md'), 'utf-8'),
+      system: prompt,
       messages: [
-          { role: 'user', content },
+          { role: 'user', content: `الصفحة رقم ${pageNumber} : \n\n${content}` },
       ],
     });
-  
+
     return lines;
+  
   } catch (error) {
-    console.error('Error parsing page');
+    
+    console.log('Error converting markdown to lines', error);
+    
     return [];
+
   }
 
 }
@@ -94,27 +134,51 @@ export async function POST(req: NextRequest) {
     const arrayBuffer = await pdf.arrayBuffer();
     const uint8Array = new Uint8Array(arrayBuffer);
     const document = await getDocument({ data: uint8Array }).promise;
-    const requests: Promise<void>[] = [];
     let processedPages = 0;
-
-    for (let pageNumber = startPage; pageNumber <= document.numPages; pageNumber++) {
-
-      const _pageNumber = pageNumber;
-
-      requests.push(new Promise(async (resolve) => {
-        const page = await document.getPage(_pageNumber);
-        const canvasFactory = document.canvasFactory;
-        const image = await convertToImage(canvasFactory, page);
-        const lines = await parsePage(image);
-        sheet.push(...lines.map((line, index) => ({ ...line, ['رقم الصفحة']: page.pageNumber, ['رقم النص']: index + 1 })));
-        processedPages += 1;
-        console.log(`Page: ${page.pageNumber} | Progress : ${Math.round((processedPages / document.numPages) * 100)}%`);
-        resolve();
-      }));
-
+    let currentPage = startPage;
+    const BATCH_SIZE = Math.min(
+      Math.max(Math.floor(Math.sqrt(document.numPages)), 5),
+      25
+    );
+    const charactersCache = new Cache(25);
+        
+    // Collect all batches (each batch is a sequential processor)
+    const batchProcessors: Promise<void>[] = [];
+    
+    while (currentPage <= document.numPages) {
+      const batchStartPage = currentPage;
+      const batchEndPage = Math.min(currentPage + BATCH_SIZE - 1, document.numPages);
+    
+      // Each batch is a sequential processor
+      const batchPromise = (async () => {
+        for (let pageNum = batchStartPage; pageNum <= batchEndPage; pageNum++) {
+          const page = await document.getPage(pageNum);
+          const canvasFactory = document.canvasFactory;
+          const image = await convertToImage(canvasFactory, page);
+          const { content, characters } = await convertToMarkdown(image);
+          characters.forEach((character) => {
+            charactersCache.add(character.name, character.description);
+          });
+          const lines = await convertToLines(page.pageNumber, content, charactersCache.toString());
+          sheet.push(...lines.map((line, index) => ({
+            ...line,
+            ['رقم الصفحة']: page.pageNumber,
+            ['رقم النص']: index + 1,
+          })));
+          processedPages += 1;
+          console.log(`Page: ${page.pageNumber} | Progress: ${Math.round((processedPages / document.numPages) * 100)}%`);
+        }
+      })();
+    
+      batchProcessors.push(batchPromise);
+    
+      currentPage = batchEndPage + 1;
     }
+    
+    // Now run all batch processors in parallel
+    await Promise.all(batchProcessors);
 
-    await Promise.all(requests);
+    console.log("Sorting lines...");
 
     sheet = sheet.sort((a, b) => {
       if (a['رقم الصفحة'] === b['رقم الصفحة']) {
@@ -123,10 +187,14 @@ export async function POST(req: NextRequest) {
       return a['رقم الصفحة'] - b['رقم الصفحة'];
     });
 
+    console.log("Saving lines...");
+
     const sheetFile: SheetFile = {pdfFilename: pdf.name, sheet};
     await redis.set(sheetId, JSON.stringify(sheetFile), 'EX', 60 * 60 * 24); // Store for 24 hours
     const sheetUrl = new URL(`/api/sheetify/${sheetId}`, req.url).toString();
 
+    console.log("Done!");
+    
     return NextResponse.json({ sheetUrl }, { status: 200 });
   } catch (error) {
     console.error('Error processing PDF:', error);
