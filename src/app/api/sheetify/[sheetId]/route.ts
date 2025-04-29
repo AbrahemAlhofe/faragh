@@ -15,7 +15,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ shee
     });
   }
 
-  const sheetFileContent = await redis.get(sheetId);
+  const sheetFileContent = await redis.get(`${sheetId}-file`);
 
   if (!sheetFileContent) {
     return new Response(JSON.stringify({ error: "Sheet not found" }), {

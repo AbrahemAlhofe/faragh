@@ -14,3 +14,5 @@ export type SheetFile = {
   pdfFilename: string;
   sheet: Sheet;
 }
+
+export type Summary = string;
