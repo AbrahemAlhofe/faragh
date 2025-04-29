@@ -16,9 +16,9 @@ export function convertToCSV(data: any[]): string {
     return csvRows.join("\r\n");
   }
 
-  export function parallelForLoop(num: number, callback: (index: number) => Promise<void>, startingIndex: number = 1) {
+  export function parallelReading(num: number, callback: (index: number) => Promise<void>, startingIndex: number = 1) {
     const promises: Promise<void>[] = [];
-    for (let i = startingIndex; i < num; i++) {
+    for (let i = startingIndex; i <= num; i++) {
       promises.push(callback(i));
     }
     return Promise.all(promises);

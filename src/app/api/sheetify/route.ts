@@ -4,7 +4,7 @@ import '@ungap/with-resolvers';
 import Redis from 'ioredis';
 import { SheetFile } from '@/lib/types';
 import { useOCR, useScanner, useSheeter, useSummary } from '@/lib/serverHooks';
-import { parallelForLoop } from '@/lib/utils';
+import { parallelReading } from '@/lib/utils';
 
 const redis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379');
 
@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
     console.log("Scanning pages...");
     const canvasFactory = document.canvasFactory;
     const [images, scan] = useScanner(canvasFactory);
-    await parallelForLoop(document.numPages, async (pageNum: number) => {
+    await parallelReading(document.numPages, async (pageNum: number) => {
       
       const page = await document.getPage(pageNum);
       await scan(page);
@@ -42,7 +42,7 @@ export async function POST(req: NextRequest) {
     
     console.log("Extracting text from pages...");
     const [content, extract] = useOCR();
-    await parallelForLoop(document.numPages, async (pageNum: number) => {
+    await parallelReading(document.numPages, async (pageNum: number) => {
 
       await extract(pageNum, images()[pageNum - 1]);
 
@@ -58,7 +58,7 @@ export async function POST(req: NextRequest) {
     
     console.log("Starting page sheetifing...");
     const [sheet, sheetify] = useSheeter(summary());
-    await parallelForLoop(document.numPages, async (pageNum: number) => {
+    await parallelReading(document.numPages, async (pageNum: number) => {
               
       await sheetify(pageNum, content()[pageNum - 1]);
         
