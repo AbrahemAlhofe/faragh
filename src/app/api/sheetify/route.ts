@@ -5,6 +5,7 @@ import Redis from 'ioredis';
 import { SheetFile } from '@/lib/types';
 import { useOCR, useScanner, useSheeter, useSummary } from '@/lib/serverHooks';
 import { parallelReading } from '@/lib/utils';
+import fs from 'fs';
 
 const redis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379');
 
@@ -25,6 +26,8 @@ export async function POST(req: NextRequest) {
     if (!pdf) {
       return NextResponse.json({ error: 'No pdf uploaded' }, { status: 400 });
     }
+
+    if (!fs.existsSync(process.env.TMPDIR || '/tmp')) fs.mkdirSync(tmp);
 
     const arrayBuffer = await pdf.arrayBuffer();
     const uint8Array = new Uint8Array(arrayBuffer);

@@ -44,7 +44,7 @@ export default function Home() {
       setTotalPages(pdf.proxy.numPages);
       setEndPage(pdf.proxy.numPages);
       setIsLoading(true);
-      // setCurrentPageThumbnail(await (await scanner.readPage(file, 1)).scan());
+      setCurrentPageThumbnail(await (await scanner.readPage(file, 1)).scan());
       setIsLoading(false);
     }
   };
@@ -60,7 +60,7 @@ export default function Home() {
       return;
     }
 
-    // setCurrentPageThumbnail(await (await scanner.readPage(file, page)).scan());
+    setCurrentPageThumbnail(await (await scanner.readPage(file, page)).scan());
 
   }
 
@@ -217,7 +217,7 @@ export default function Home() {
               </FileUpload.DropzoneContent>
             </FileUpload.Dropzone>
           </FileUpload.Root> }
-          {currentPageThumbnail != null && <img style={{minWidth: '20vw', minHeight: '65vh', objectFit: 'contain'}} alt="current page thumbnail" width={'20vw'} height={'65vh'} />}
+          {currentPageThumbnail != null && <img src={URL.createObjectURL(currentPageThumbnail)} style={{minWidth: '20vw', minHeight: '65vh', objectFit: 'contain'}} alt="current page thumbnail" width={'20vw'} height={'65vh'} />}
           { file != null && <Button onClick={handleConvert} loading={isLoading} variant="surface" width={'100%'}>
             فرغ النص
           </Button> }

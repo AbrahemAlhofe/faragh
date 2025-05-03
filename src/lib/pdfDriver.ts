@@ -24,7 +24,7 @@ export class PDFPage {
 
   constructor (public proxy: PDFPageProxy) {}
 
-  async scan (scale: number = 0.5): Promise<Blob> {
+  async scan (scale: number = 0.9): Promise<Blob> {
     const viewport = this.proxy.getViewport({ scale });
     const canvas = document.createElement('canvas');
     const context = canvas.getContext('2d');
@@ -127,7 +127,7 @@ export default class PDFDriver {
 
   }
 
-  async scanPage (file: File, pageNumber: number, scale: number = 0.5): Promise<Blob> {
+  async scanPage (file: File, pageNumber: number, scale: number = 0.9): Promise<Blob> {
     const fileReader = new FileReader();
   
     return new Promise((resolve, reject) => {
