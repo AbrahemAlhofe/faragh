@@ -6,6 +6,7 @@ import { SheetFile } from '@/lib/types';
 import { useOCR, useScanner, useSheeter, useSummary } from '@/lib/serverHooks';
 import { parallelReading } from '@/lib/utils';
 import fs from 'fs';
+import { AISDKError } from 'ai';
 
 const redis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379');
 
@@ -27,7 +28,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'No pdf uploaded' }, { status: 400 });
     }
 
-    if (!fs.existsSync(process.env.TMPDIR || '/tmp')) fs.mkdirSync(tmp);
+    const tmp = `${process.cwd()}/tmp`;
+    if (!fs.existsSync(tmp)) fs.mkdirSync(tmp);
 
     const arrayBuffer = await pdf.arrayBuffer();
     const uint8Array = new Uint8Array(arrayBuffer);
@@ -77,7 +79,13 @@ export async function POST(req: NextRequest) {
     console.log("Done!");
     return NextResponse.json({ sheetUrl }, { status: 200 });
   } catch (error) {
-    console.error('Error processing PDF:', error);
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    if (error instanceof AISDKError) {
+      const limitError = error.toString().includes("You exceeded your current quota");
+      if (limitError) {
+        return NextResponse.json({ type: 'EXCEEDED_QUOTA' }, { status: 429 });
+      }
+      return NextResponse.json({ error: 'AISDK_ERROR' }, { status: 500 });
+    }
+    return NextResponse.json({ type: 'INTERNAL_SERVER_ERROR' }, { status: 500 });
   }
 }

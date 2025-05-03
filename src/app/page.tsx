@@ -19,6 +19,7 @@ import { LuDownload, LuUpload } from 'react-icons/lu';
 import PDFDriver, { PDFDocument } from '../lib/pdfDriver';
 import Timer from '@/components/ui/timer';
 import { Line } from '@/lib/types';
+import PDFViewer from '@/components/ui/pdf-viewer';
 
 const scanner = new PDFDriver();
 
@@ -26,14 +27,14 @@ export default function Home() {
   const [file, setFile] = useState<File | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [lines, setLines] = useState<Line[]>([]);
-  const [currentPage, setCurrentPage] = useState(1);
+  const [startPage, setStartPage] = useState(1);
   const [totalPages, setTotalPages] = useState(0);
   const [pdf, setPdf] = useState<PDFDocument | null>(null);
   const [endPage, setEndPage] = useState(0);
-  const [currentPageThumbnail, setCurrentPageThumbnail] = useState<Blob | null>(null);
   const [isDone, setIsDone] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [sheetUrl, setSheetUrl] = useState<string | null>(null);
+  const [cursor, setCursor] = useState(1);
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -44,25 +45,9 @@ export default function Home() {
       setTotalPages(pdf.proxy.numPages);
       setEndPage(pdf.proxy.numPages);
       setIsLoading(true);
-      setCurrentPageThumbnail(await (await scanner.readPage(file, 1)).scan());
       setIsLoading(false);
     }
   };
-
-  const showPage = async (page: number) => {
-
-    if (!file) {
-      toaster.create({
-        title: 'No file selected',
-        type: 'error',
-        duration: 3000,
-      });
-      return;
-    }
-
-    setCurrentPageThumbnail(await (await scanner.readPage(file, page)).scan());
-
-  }
 
   const handleConvert = async () => {
     if (!file) {
@@ -85,9 +70,27 @@ export default function Home() {
 
       const formData = new FormData();
       formData.append('pdf', file);
-      const { sheetUrl }: { sheetUrl: string } = await fetch(`/api/sheetify?startPage=${currentPage}&endPage=${endPage}`, { method: 'POST', body: formData }).then(res => res.json());
-      
-      setSheetUrl(sheetUrl);
+      const request = await fetch(`/api/sheetify?startPage=${startPage}&endPage=${endPage}`, { method: 'POST', body: formData });
+      const response = await request.json();
+
+      if (request.ok) {
+        
+        setSheetUrl(response.sheetUrl);
+
+      } else {
+
+        const { type } = response;
+
+        if (type === 'EXCEEDED_QUOTA') {
+          toaster.create({
+            title: 'الحد اليومي للتفريغ قد تم تجاوزه',
+            description: 'الحد اليومي للتفريغ هو 500 صفحة في اليوم',
+            type: 'error',
+            duration: 3000
+          });
+        }
+
+      }      
 
       // let _currentPage = currentPage;
 
@@ -125,7 +128,7 @@ export default function Home() {
       toaster.create({
         title: 'No sheet URL available',
         type: 'error',
-        duration: 3000,
+        duration: 3000
       });
       return;
     }
@@ -140,6 +143,50 @@ export default function Home() {
     <Container fluid py={10} height={'100vh'} width={'100vw'} centerContent={true}>
       <Toaster />
       <HStack height={'100%'} width={'100%'} gap={5} alignItems={'stretch'}>
+      <VStack gap={5} width={'20%'} height={'100%'} justifyContent={'space-between'}>
+          {file == null && <FileUpload.Root
+            accept={["application/pdf"]}
+            alignItems="stretch"
+            flexGrow={1}
+            maxFiles={10}
+            onChange={handleFileChange}
+            width={'20vw'}
+            height={'65vh'}
+          >
+            <FileUpload.HiddenInput />
+            <FileUpload.Dropzone flexGrow={1}>
+              <Icon size="md" color="fg.muted">
+                <LuUpload />
+              </Icon>
+              <FileUpload.DropzoneContent>
+                <Box>Drag and drop files here</Box>
+                <Box color="fg.muted">
+                  <b>.pdf</b> up to 5MB
+                </Box>
+              </FileUpload.DropzoneContent>
+            </FileUpload.Dropzone>
+          </FileUpload.Root> }
+          {file != null && <PDFViewer file={file} cursor={cursor}></PDFViewer>}
+          { file != null && <Button onClick={handleConvert} loading={isLoading} variant="surface" width={'100%'}>
+            فرغ النص
+          </Button> }
+          { totalPages > 0 &&
+            <HStack dir="rtl" gap={5} width={'20vw'} justifyContent={'space-between'}>
+                <Field.Root>
+                  <Field.Label>
+                    صفحة البداية
+                  </Field.Label>
+                  <Input type="number" min="1" max={totalPages} value={startPage} onFocus={(e) => setCursor(Number(e.target.value))} onChange={(e) => (setStartPage(Number(e.target.value)), setCursor(Number(e.target.value)))} />
+                </Field.Root>
+                <Field.Root>
+                  <Field.Label>
+                    صفحة النهاية
+                  </Field.Label>
+                  <Input type="number" min="1" max={totalPages} value={endPage} onFocus={(e) => setCursor(Number(e.target.value))} onChange={(e) => (setEndPage(Number(e.target.value)), setCursor(Number(e.target.value)))} />
+                </Field.Root>
+              </HStack>
+          }
+        </VStack>
         <VStack gap={5} width={'80%'}> 
           <Table.ScrollArea height={'100%'} width={'100%'} p={0}>
             <Table.Root striped dir="rtl" stickyHeader>
@@ -172,13 +219,13 @@ export default function Home() {
           { totalPages > 0 && 
             <HStack gap={5} width={'100%'} height={'3em'} justifyContent={'space-between'}>
               <Flex>
-                <Progress.Root width="md" max={100} value={currentPage / totalPages * 100}>
+                <Progress.Root width="md" max={100} value={startPage / totalPages * 100}>
                   <HStack gap="5">
-                    <Progress.Label>{currentPage}/{totalPages}</Progress.Label>
+                    <Progress.Label>{startPage}/{totalPages}</Progress.Label>
                     <Progress.Track flex="1">
                       <Progress.Range />
                     </Progress.Track>
-                    <Progress.ValueText>{Math.round(currentPage / totalPages * 100)}%</Progress.ValueText>
+                    <Progress.ValueText>{Math.round(startPage / totalPages * 100)}%</Progress.ValueText>
                   </HStack>
                 </Progress.Root>
               </Flex>
@@ -192,50 +239,6 @@ export default function Home() {
                 <Timer running={isProcessing}></Timer>
               </HStack>
             </HStack>
-          }
-        </VStack>
-        <VStack gap={5} width={'20%'} height={'100%'} justifyContent={'space-between'}>
-          {currentPageThumbnail == null && <FileUpload.Root
-            accept={["application/pdf"]}
-            alignItems="stretch"
-            flexGrow={1}
-            maxFiles={10}
-            onChange={handleFileChange}
-            width={'20vw'}
-            height={'65vh'}
-          >
-            <FileUpload.HiddenInput />
-            <FileUpload.Dropzone flexGrow={1}>
-              <Icon size="md" color="fg.muted">
-                <LuUpload />
-              </Icon>
-              <FileUpload.DropzoneContent>
-                <Box>Drag and drop files here</Box>
-                <Box color="fg.muted">
-                  <b>.pdf</b> up to 5MB
-                </Box>
-              </FileUpload.DropzoneContent>
-            </FileUpload.Dropzone>
-          </FileUpload.Root> }
-          {currentPageThumbnail != null && <img src={URL.createObjectURL(currentPageThumbnail)} style={{minWidth: '20vw', minHeight: '65vh', objectFit: 'contain'}} alt="current page thumbnail" width={'20vw'} height={'65vh'} />}
-          { file != null && <Button onClick={handleConvert} loading={isLoading} variant="surface" width={'100%'}>
-            فرغ النص
-          </Button> }
-          { totalPages > 0 &&
-            <HStack dir="rtl" gap={5} width={'20vw'} justifyContent={'space-between'}>
-                <Field.Root>
-                  <Field.Label>
-                    الصفحة الحالية
-                  </Field.Label>
-                  <Input type="number" min="1" max={totalPages} value={currentPage} onChange={(e) => (setCurrentPage(Number(e.target.value)), showPage(Number(e.target.value)))} />
-                </Field.Root>
-                <Field.Root>
-                  <Field.Label>
-                    صفحة النهاية
-                  </Field.Label>
-                  <Input type="number" min="1" max={totalPages} value={endPage} onChange={(e) => setEndPage(Number(e.target.value))} />
-                </Field.Root>
-              </HStack>
           }
         </VStack>
       </HStack>
