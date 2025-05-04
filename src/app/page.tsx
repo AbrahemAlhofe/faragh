@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Box,
   Button,
@@ -16,12 +16,9 @@ import {
 import { Toaster, toaster } from '@/components/ui/toaster';
 import { FileUpload, Icon } from '@chakra-ui/react';
 import { LuDownload, LuUpload } from 'react-icons/lu';
-import PDFDriver, { PDFDocument } from '../lib/pdfDriver';
 import Timer from '@/components/ui/timer';
-import { Line } from '@/lib/types';
+import { Line, PDFJs } from '@/lib/types';
 import PDFViewer from '@/components/ui/pdf-viewer';
-
-const scanner = new PDFDriver();
 
 export default function Home() {
   const [file, setFile] = useState<File | null>(null);
@@ -29,23 +26,40 @@ export default function Home() {
   const [lines, setLines] = useState<Line[]>([]);
   const [startPage, setStartPage] = useState(1);
   const [totalPages, setTotalPages] = useState(0);
-  const [pdf, setPdf] = useState<PDFDocument | null>(null);
   const [endPage, setEndPage] = useState(0);
   const [isDone, setIsDone] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [sheetUrl, setSheetUrl] = useState<string | null>(null);
   const [cursor, setCursor] = useState(1);
+  let pdfJs: PDFJs | null = null;
+
+  useEffect(() => {
+    
+    (async () => {
+
+      pdfJs = await import('pdfjs-dist');
+  
+      pdfJs.GlobalWorkerOptions.workerSrc = new URL(
+        'pdfjs-dist/build/pdf.worker.mjs',
+        import.meta.url
+      ).toString();
+  
+    })()
+
+  }, []);
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const pdf = await scanner.read(file);
+      if (pdfJs) {
+        const pdf = await pdfJs.getDocument({ data: await file.arrayBuffer() }).promise;
+        setTotalPages(pdf.numPages);
+        setEndPage(pdf.numPages);
+        pdf.destroy();
+      }
       setFile(file);
-      setPdf(pdf);
-      setTotalPages(pdf.proxy.numPages);
-      setEndPage(pdf.proxy.numPages);
       setIsLoading(true);
-      setIsLoading(false);
+      setTimeout(() => setIsLoading(false), 1000)
     }
   };
 
@@ -62,7 +76,7 @@ export default function Home() {
     setIsLoading(true);
     try {
 
-      if (!pdf) {
+      if (!file) {
         throw new Error('PDF not loaded');
       }
 
