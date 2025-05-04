@@ -51,15 +51,14 @@ export default function Home() {
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      if (pdfJs) {
-        const pdf = await pdfJs.getDocument({ data: await file.arrayBuffer() }).promise;
-        setTotalPages(pdf.numPages);
-        setEndPage(pdf.numPages);
-        pdf.destroy();
-      }
-      setFile(file);
+      if (!pdfJs) return;
       setIsLoading(true);
-      setTimeout(() => setIsLoading(false), 1000)
+      const pdf = await pdfJs.getDocument({ data: await file.arrayBuffer() }).promise;
+      setTotalPages(pdf.numPages);
+      setEndPage(pdf.numPages);
+      pdf.destroy();
+      setFile(file);
+      setIsLoading(false);
     }
   };
 
@@ -196,7 +195,7 @@ export default function Home() {
                   <Field.Label>
                     صفحة النهاية
                   </Field.Label>
-                  <Input type="number" min="1" max={totalPages} value={endPage} onFocus={(e) => setCursor(Number(e.target.value))} onChange={(e) => (setEndPage(Number(e.target.value)), setCursor(Number(e.target.value)))} />
+                  <Input type="number" min="1" max={totalPages} value={endPage} onBlur={e => setCursor(Number(startPage))} onFocus={(e) => setCursor(Number(e.target.value))} onChange={(e) => (setEndPage(Number(e.target.value)), setCursor(Number(e.target.value)))} />
                 </Field.Root>
               </HStack>
           }
