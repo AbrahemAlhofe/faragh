@@ -1,4 +1,4 @@
-import { generateObject, generateText } from 'ai';
+import { CoreMessage, generateObject, generateText } from 'ai';
 import { google } from '@ai-sdk/google';
 import { z } from 'zod';
 import fs from 'fs/promises';
@@ -8,48 +8,11 @@ import { PDFPageProxy } from 'pdfjs-dist/types/web/interfaces';
 import { Line, Summary } from '@/lib/types';
 import Mustache from 'mustache';
 
-export function useSummary (): [() => Summary, (content: string) => Promise<string>] {
-
-  var cache: Summary = "";
-
-  return [() => cache, async (content: string): Promise<string> => {
-
-    const promptFile = await fs.readFile(path.join('src/lib/prompts', 'summarize.md'), 'utf-8')
-    const prompt = Mustache.render(promptFile, { summary: cache });
-    const { text: summary } = await generateText({
-      model: google('gemini-2.5-pro-preview-03-25'),
-      messages: [
-          { role: 'user', content: `قم بتخليص الأحداث التالية مراعيا الشخصيات, الأماكن و الأحداث الرئيسية : ${cache + "\n\n" + content} \n\n\n. أجب مباشرة بالملخص دون إضافة عنوان أو ماشابه` },
-      ],
-    });
-
-    cache = summary;
-
-    await fs.writeFile(path.join('tmp', `summary.md`), summary, 'utf-8');
-
-    return summary;
-
-  }]
-
-}
-
 export function useScanner (canvasFactory: any): [() => Buffer[], (page: PDFPageProxy) => Promise<Buffer>] {
   
   const imagesCache: Buffer[] = [];
 
   return [() => imagesCache, async (page: PDFPageProxy) => {
-
-    const isImageCached = await fs.stat(path.join('tmp', `${page.pageNumber}.png`)).then(() => true).catch(() => false);
-
-    if (isImageCached) {
-
-      const image = await fs.readFile(path.join('tmp', `${page.pageNumber}.png`));
-      
-      imagesCache.push(image);
-
-      return image;
-
-    }
   
     // Render the page on a Node canvas with 100% scale.
     const viewport = page.getViewport({ scale: 1 });
@@ -66,8 +29,6 @@ export function useScanner (canvasFactory: any): [() => Buffer[], (page: PDFPage
     await renderTask.promise;
   
     const image = canvasAndContext.canvas.toBuffer("image/png");
-  
-    await fs.writeFile(path.join('tmp', `${page.pageNumber}.png`), image, 'binary');
 
     imagesCache.push(image);
   
@@ -77,105 +38,82 @@ export function useScanner (canvasFactory: any): [() => Buffer[], (page: PDFPage
 
 }
 
-export function useOCR (): [() => string[], (pageNumber: number, image: Buffer) => Promise<string>] {
+export function useSheeter(): [Line[], (key: number, image: Buffer) => Promise<Line[]>] {
+  const MAX_TOKENS = 950000;
+  const conversation: Array<CoreMessage> = [];
+  const sheet: Line[] = [];
 
-  const contentCache: string[] = [];
+  async function extract(key: number, image: Buffer): Promise<Line[]> {
+    const result = await generateObject({
+      model: google('gemini-2.5-flash-preview-04-17'),
+      system: await fs.readFile(path.join('src/lib/prompts', 'sheetify.md'), 'utf-8'),
+      schema: z.array(z.object({
+        ['الشخصية']: z.string(),
+        ['النص']: z.string(),
+        ['النبرة']: z.string(),
+        ['المكان']: z.string(),
+        ['الخلفية الصوتية']: z.string(),
+      })),
+      messages: [...conversation, {
+        role: 'user',
+        content: [{ type: 'text', text: `أنت الأن تقرأ الصفحة رقم ${key}` }, { type: 'image', image }],
+      }],
+    });
 
-  return [() => contentCache, async (pageNumber: number, image: Buffer) => {
+    const responseObject: Line[] = result.object.map((line, index) => ({ ...line, ['رقم الصفحة']: key, ['رقم النص']: index + 1 })) || [];
 
+    // Save to sheet
     try {
-      
-      const isCached = await fs.stat(path.join('tmp', `${pageNumber}.md`)).then(() => true).catch(() => false);
-
-      if (isCached) {
-        
-        const content = await fs.readFile(path.join('tmp', `${pageNumber}.md`), 'utf-8');
-        contentCache.push(content);
-        
-        return content;
-
-      }
-
-      const { text: content } = await generateText({
-        model: google('gemini-2.5-flash-preview-04-17'),
-        system: await fs.readFile(path.join('src/lib/prompts', 'markdownify.md'), 'utf-8'),
-        messages: [
-            {
-              role: 'user',
-              content: [
-                { type: 'text', text: "أنت تقرأ الأن الصفحة رقم " + pageNumber },
-                { type: 'image', image: image }
-              ],
-            },
-        ],
-      });
-
-      // cache content
-      await fs.writeFile(path.join('tmp', `${pageNumber}.md`), content, 'utf-8');
-
-      return content;
-
-    } catch (error) {
-      console.error('Error converting image to markdown', error);
-      return ""
+      sheet.push(...responseObject);
+    } catch (err) {
+      console.error('Failed to parse assistant response:', responseObject, err);
     }
 
-  }];
+    // Add assistant message
+    conversation.push({
+      role: 'assistant',
+      content: [{ type: 'text', text: responseObject.map(line => `${line['الشخصية']} : ${line['النص']}`).join('\n') }],
+    });
 
+    // Trim conversation if token count too high
+    if (result.usage && result.usage.totalTokens > MAX_TOKENS) {
+      trimConversation(conversation, MAX_TOKENS);
+    }
+
+    return responseObject;
+
+  }
+
+  return [sheet, extract] as const;
 }
 
-export function useSheeter(summary: string): [() => Line[], (pageNumber: number, content: string) => Promise<Omit<Line, 'رقم الصفحة' | 'رقم النص'>[]>] {
 
-  const sheet: Line[] = [];
-  
-  return [
-    
-    () => sheet.sort((a, b) => {
-          if (a['رقم الصفحة'] === b['رقم الصفحة']) {
-            return a['رقم النص'] - b['رقم النص'];
-          }
-          return a['رقم الصفحة'] - b['رقم الصفحة'];
-    }),
-    
-    async (pageNumber: number, content: string): Promise<Omit<Line, 'رقم الصفحة' | 'رقم النص'>[]> => {
-    
-      try {
+function trimConversation(conversation: Array<CoreMessage>, maxTokens: number) {
+  let totalTokens = 0;
+  const tokenCounts = [];
 
-        const promptFile = await fs.readFile(path.join('src/lib/prompts', 'sheetify.md'), 'utf-8');
-        const prompt = Mustache.render(promptFile, { summary });
-        const { object: lines } = await generateObject({
-          model: google('gemini-2.5-pro-preview-03-25'),
-          schema: z.array(z.object({
-            ['الشخصية']: z.string(),
-            ['النص']: z.string(),
-            ['النبرة']: z.string(),
-            ['المكان']: z.string(),
-            ['الخلفية الصوتية']: z.string(),
-          })),
-          system: prompt,
-          messages: [
-              { role: 'user', content: `الصفحة رقم ${pageNumber} : \n\n${content}` },
-          ],
-        });
+  // Estimate tokens for each message
+  for (const message of conversation) {
+    const messageText = (message.content as Array<{ type: string, text: string }>)
+      .map(content => content.text || '')
+      .join(' ');
+    const tokenCount = estimateTokens(messageText);
+    tokenCounts.push(tokenCount);
+    totalTokens += tokenCount;
+  }
 
-        const linesWithPageNumber = lines.map((line: Omit<Line, 'رقم الصفحة' | 'رقم النص'>, index: number) => ({
-          ...line,
-          'رقم الصفحة': pageNumber,
-          'رقم النص': index + 1,
-        }));
+  // Remove oldest message pairs until within token limit
+  while (totalTokens > maxTokens && conversation.length > 2) {
+    // Remove the first two messages (user and model pair)
+    const removedUser = conversation.shift();
+    const removedModel = conversation.shift();
+    // @ts-ignore
+    const removedTokens = tokenCounts.shift() + tokenCounts.shift();
+    totalTokens -= removedTokens;
+  }
+}
 
-        sheet.push(...linesWithPageNumber);
-
-        return lines;
-      
-      } catch (error) {
-        
-        console.log('Error converting markdown to lines', error);
-        
-        return [];
-
-      }
-
-  }];
-
+// Simple token estimation function (adjust as needed)
+function estimateTokens(text: string) {
+  return Math.ceil(text.split(/\s+/).length * 1.5); // Approximate tokens per word
 }
