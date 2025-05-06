@@ -54,7 +54,7 @@ export default function Home() {
 
   useEffect(() => {
 
-    let time = 1000;
+    let time = 100;
 
     (async () => {
 
@@ -74,11 +74,6 @@ export default function Home() {
         } else {
           setPdfViewerCursor(cursor);
           setProgress(progress);
-          if (progress === currentProgress) {
-            time += 500;
-          } else {
-            time = Math.max(time - 500, 1000);
-          }
         }
   
         if (stage === 'SCANNING') setProgressLabel("جاري مسح ملف الـ PDF")
@@ -271,9 +266,9 @@ export default function Home() {
                     <Table.Cell minWidth={"2vw"} whiteSpace={"wrap"}>{line['رقم النص']}</Table.Cell>
                     <Table.Cell minWidth={"2vw"} whiteSpace={"wrap"}>{line['الشخصية']}</Table.Cell>
                     <Table.Cell minWidth={"20vw"} whiteSpace={"wrap"}>{line['النص']}</Table.Cell>
-                    <Table.Cell minWidth={"20vw"} whiteSpace={"wrap"}>{line['النبرة']}</Table.Cell>
-                    <Table.Cell minWidth={"20vw"} whiteSpace={"wrap"}>{line['المكان']}</Table.Cell>
-                    <Table.Cell minWidth={"10vw"} whiteSpace={"wrap"}>{line['الخلفية الصوتية']}</Table.Cell>
+                    <Table.Cell minWidth={"10vw"} whiteSpace={"wrap"}>{line['النبرة']}</Table.Cell>
+                    <Table.Cell minWidth={"5vw"} whiteSpace={"wrap"}>{line['المكان']}</Table.Cell>
+                    <Table.Cell minWidth={"7vw"} whiteSpace={"wrap"}>{line['الخلفية الصوتية']}</Table.Cell>
                   </Table.Row>
                 ))}
               </Table.Body>

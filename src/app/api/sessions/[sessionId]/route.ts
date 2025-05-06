@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import "@ungap/with-resolvers";
 import Redis from "ioredis";
-import { SheetFile } from "@/lib/types";
+import { Line, SheetFile } from "@/lib/types";
 import { useScanner, useSheeter } from "@/lib/serverHooks";
 import { convertToCSV, parallelReading } from "@/lib/utils";
 
@@ -48,15 +48,15 @@ export async function POST(
   const [images, scan] = useScanner(canvasFactory);
   let scannedPages = [];
   await parallelReading(document.numPages, async (pageNum: number) => {
-    const page = await document.getPage(pageNum);
-    await scan(page);
     await redis.set(`${sessionId}/progress`, JSON.stringify({ stage: "SCANNING", cursor: pageNum, progress: Math.floor((scannedPages.length / document.numPages) * 100), details: "" }));
+    const page = await document.getPage(pageNum);
+    await scan(pageNum, page);
     scannedPages.push(pageNum);
   });
 
   const [sheet, extract] = await useSheeter();
   for (let i = startPage; i <= endPage; i++) {
-    const image = images()[i - 1];
+    const image = images(i) as Buffer;
     const lines = await extract(i, image);
     await redis.set(`${sessionId}/progress`, JSON.stringify({ stage: "EXTRACTING", cursor: i, progress: Math.floor((i / document.numPages) * 100), details: JSON.stringify(lines) }));
   }

@@ -1,4 +1,4 @@
-import { CoreMessage, generateObject, generateText } from 'ai';
+import { CoreMessage, generateObject } from 'ai';
 import { google } from '@ai-sdk/google';
 import { z } from 'zod';
 import fs from 'fs/promises';
@@ -7,11 +7,11 @@ import '@ungap/with-resolvers';
 import { PDFPageProxy } from 'pdfjs-dist/types/web/interfaces';
 import { Line, Summary } from '@/lib/types';
 
-export function useScanner (canvasFactory: any): [() => Buffer[], (page: PDFPageProxy) => Promise<Buffer>] {
+export function useScanner (canvasFactory: any): [(key?: number) => Record<number, Buffer> | Buffer, (key: number, page: PDFPageProxy) => Promise<Buffer>] {
   
-  const imagesCache: Buffer[] = [];
+  const imagesCache: Record<number, Buffer> = {};
 
-  return [() => imagesCache, async (page: PDFPageProxy) => {
+  return [(key?: number) => key == undefined ? imagesCache : imagesCache[key], async (key: number, page: PDFPageProxy) => {
   
     // Render the page on a Node canvas with 100% scale.
     const viewport = page.getViewport({ scale: 1 });
@@ -29,7 +29,7 @@ export function useScanner (canvasFactory: any): [() => Buffer[], (page: PDFPage
   
     const image = canvasAndContext.canvas.toBuffer("image/png");
 
-    imagesCache.push(image);
+    imagesCache[key] = image;
   
     return image;
 
@@ -44,6 +44,12 @@ export async function useSheeter(): Promise<[Line[], (key: number, image: Buffer
   const instructions = await fs.readFile(path.join('src/lib/prompts', 'sheetify.md'), 'utf-8');
 
   async function extract(key: number, image: Buffer): Promise<Line[]> {
+
+    conversation.push({
+      role: 'user',
+      content: [{ type: 'image', image }],
+    })
+
     const result = await generateObject({
       model: google('gemini-2.5-flash-preview-04-17'),
       system: instructions,
@@ -54,19 +60,16 @@ export async function useSheeter(): Promise<[Line[], (key: number, image: Buffer
         ['المكان']: z.string(),
         ['الخلفية الصوتية']: z.string(),
       })),
-      messages: [...conversation, {
-        role: 'user',
-        content: [{ type: 'text', text: `أنت الأن تقرأ الصفحة رقم ${key}` }, { type: 'image', image }],
-      }],
+      messages: conversation,
     });
 
-    const responseObject: Line[] = result.object.map((line, index) => ({ ...line, ['رقم الصفحة']: key, ['رقم النص']: index + 1 }));
+    const responseObject: Omit<Line, 'رقم النص' | 'رقم الصفحة'>[] = result.object;
+    const lines: Line[] = responseObject.map((line, index) => ({ ...line, ['رقم الصفحة']: key, ['رقم النص']: index + 1 }));
 
     if ( responseObject.length === 0 ) return [];
 
-    // Save to sheet
     try {
-      sheet.push(...responseObject);
+      sheet.push(...lines);
     } catch (err) {
       console.error('Failed to parse assistant response:', responseObject, err);
     }
@@ -74,7 +77,7 @@ export async function useSheeter(): Promise<[Line[], (key: number, image: Buffer
     // Add assistant message
     conversation.push({
       role: 'assistant',
-      content: [{ type: 'text', text: responseObject.map(line => `${line['الشخصية']} : ${line['النص']}`).join('\n') }],
+      content: [{ type: 'text', text: JSON.stringify(responseObject) }],
     });
 
     // Trim conversation if token count too high
@@ -82,7 +85,7 @@ export async function useSheeter(): Promise<[Line[], (key: number, image: Buffer
       trimConversation(conversation, MAX_TOKENS);
     }
 
-    return responseObject;
+    return lines;
 
   }
 
