@@ -43,3 +43,8 @@ export function convertToCSV(data: any[]): string {
   
     return new Blob(byteArrays, { type: contentType });
   };
+
+
+  export function sleep(ms: number) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }

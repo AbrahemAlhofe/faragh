@@ -6,7 +6,6 @@ import path from 'path';
 import '@ungap/with-resolvers';
 import { PDFPageProxy } from 'pdfjs-dist/types/web/interfaces';
 import { Line, Summary } from '@/lib/types';
-import Mustache from 'mustache';
 
 export function useScanner (canvasFactory: any): [() => Buffer[], (page: PDFPageProxy) => Promise<Buffer>] {
   
@@ -38,15 +37,16 @@ export function useScanner (canvasFactory: any): [() => Buffer[], (page: PDFPage
 
 }
 
-export function useSheeter(): [Line[], (key: number, image: Buffer) => Promise<Line[]>] {
+export async function useSheeter(): Promise<[Line[], (key: number, image: Buffer) => Promise<Line[]>]> {
   const MAX_TOKENS = 950000;
   const conversation: Array<CoreMessage> = [];
   const sheet: Line[] = [];
+  const instructions = await fs.readFile(path.join('src/lib/prompts', 'sheetify.md'), 'utf-8');
 
   async function extract(key: number, image: Buffer): Promise<Line[]> {
     const result = await generateObject({
       model: google('gemini-2.5-flash-preview-04-17'),
-      system: await fs.readFile(path.join('src/lib/prompts', 'sheetify.md'), 'utf-8'),
+      system: instructions,
       schema: z.array(z.object({
         ['الشخصية']: z.string(),
         ['النص']: z.string(),
@@ -60,7 +60,9 @@ export function useSheeter(): [Line[], (key: number, image: Buffer) => Promise<L
       }],
     });
 
-    const responseObject: Line[] = result.object.map((line, index) => ({ ...line, ['رقم الصفحة']: key, ['رقم النص']: index + 1 })) || [];
+    const responseObject: Line[] = result.object.map((line, index) => ({ ...line, ['رقم الصفحة']: key, ['رقم النص']: index + 1 }));
+
+    if ( responseObject.length === 0 ) return [];
 
     // Save to sheet
     try {
