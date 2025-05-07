@@ -48,3 +48,15 @@ export function convertToCSV(data: any[]): string {
   export function sleep(ms: number) {
     return new Promise(resolve => setTimeout(resolve, ms));
   }
+
+  export async function tryCall(callback: (...args: any[]) => Promise<any>) {
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        return await callback();
+      } catch (error) {
+        if (attempt === 3) {
+          throw error; // or throw error
+        }
+      }
+    }
+  }

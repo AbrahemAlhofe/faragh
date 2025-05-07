@@ -54,7 +54,7 @@ export default function Home() {
 
   useEffect(() => {
 
-    let time = 100;
+    let time = 500;
 
     (async () => {
 

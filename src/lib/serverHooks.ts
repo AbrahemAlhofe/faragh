@@ -6,6 +6,7 @@ import path from 'path';
 import '@ungap/with-resolvers';
 import { PDFPageProxy } from 'pdfjs-dist/types/web/interfaces';
 import { Line, Summary } from '@/lib/types';
+import { tryCall } from './utils';
 
 export function useScanner (canvasFactory: any): [(key?: number) => Record<number, Buffer> | Buffer, (key: number, page: PDFPageProxy) => Promise<Buffer>] {
   
@@ -38,7 +39,7 @@ export function useScanner (canvasFactory: any): [(key?: number) => Record<numbe
 }
 
 export async function useSheeter(): Promise<[Line[], (key: number, image: Buffer) => Promise<Line[]>]> {
-  const MAX_TOKENS = 950000;
+  const MAX_TOKENS = 900_000;
   const conversation: Array<CoreMessage> = [];
   const sheet: Line[] = [];
   const instructions = await fs.readFile(path.join('src/lib/prompts', 'sheetify.md'), 'utf-8');
@@ -50,7 +51,7 @@ export async function useSheeter(): Promise<[Line[], (key: number, image: Buffer
       content: [{ type: 'image', image }],
     })
 
-    const result = await generateObject({
+    const result = await tryCall(async () => await generateObject({
       model: google('gemini-2.5-flash-preview-04-17'),
       system: instructions,
       schema: z.array(z.object({
@@ -61,7 +62,7 @@ export async function useSheeter(): Promise<[Line[], (key: number, image: Buffer
         ['الخلفية الصوتية']: z.string(),
       })),
       messages: conversation,
-    });
+    }));
 
     const responseObject: Omit<Line, 'رقم النص' | 'رقم الصفحة'>[] = result.object;
     const lines: Line[] = responseObject.map((line, index) => ({ ...line, ['رقم الصفحة']: key, ['رقم النص']: index + 1 }));
@@ -82,6 +83,7 @@ export async function useSheeter(): Promise<[Line[], (key: number, image: Buffer
 
     // Trim conversation if token count too high
     if (result.usage && result.usage.totalTokens > MAX_TOKENS) {
+      console.log("Trimming conversation");
       trimConversation(conversation, MAX_TOKENS);
     }
 
