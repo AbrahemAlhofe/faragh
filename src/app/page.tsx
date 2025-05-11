@@ -181,6 +181,7 @@ export default function Home() {
     } finally {
       setIsUploading(false);
       setIsProcessing(false);
+      setProgressLabel(null)
     }
   };
 
