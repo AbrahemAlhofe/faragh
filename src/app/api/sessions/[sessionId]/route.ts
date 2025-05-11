@@ -18,7 +18,6 @@ export async function POST(
     10
   );
   const endPage = parseInt(req.nextUrl.searchParams.get("endPage") || "1", 10);
-  const sheetId = Math.random().toString(36).substring(2, 15);
   const contentType = req.headers.get("content-type") || "";
 
   await redis.set(
@@ -45,48 +44,48 @@ export async function POST(
   const document = await getDocument({ data: uint8Array }).promise;
 
   const canvasFactory = document.canvasFactory;
-  const [images, scan] = useScanner(canvasFactory);
+  const [images, scan] = useScanner(canvasFactory, 1);
   let scannedPages = [];
   await parallelReading(document.numPages, async (pageNum: number) => {
-    await redis.set(`${sessionId}/progress`, JSON.stringify({ stage: "SCANNING", cursor: pageNum, progress: Math.floor((scannedPages.length / document.numPages) * 100), details: "" }));
     const page = await document.getPage(pageNum);
     await scan(pageNum, page);
     scannedPages.push(pageNum);
+    await redis.set(`${sessionId}/progress`, JSON.stringify({ stage: "SCANNING", cursor: pageNum, progress: Math.floor((scannedPages.length / document.numPages) * 100), details: "" }));
   });
 
-  const [sheet, extract] = await useSheeter();
+  const [sheet, extract] = await useSheeter({ readingMemoryLimit: 15 });
   for (let i = startPage; i <= endPage; i++) {
-    const image = images(i) as Buffer;
+    const image = images(i) as string;
     const lines = await extract(i, image);
     await redis.set(`${sessionId}/progress`, JSON.stringify({ stage: "EXTRACTING", cursor: i, progress: Math.floor((i / document.numPages) * 100), details: JSON.stringify(lines) }));
   }
 
   const sheetFile: SheetFile = { pdfFilename: pdf.name, sheet };
   await redis.set(
-    `${sheetId}/results`,
+    `${sessionId}/sheet`,
     JSON.stringify(sheetFile),
     "EX",
-    60 * 60 * 24
+    60 * 60 * 5
   );
-  const sheetUrl = new URL(`/api/sheetify/${sheetId}`, req.url).toString();
+  const sheetUrl = new URL(`/api/sessions/${sessionId}`, req.url).toString();
 
   return NextResponse.json({ sheetUrl }, { status: 200 });
 }
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: Promise<{ sheetId: string }> }
+  { params }: { params: Promise<{ sessionId: string }> }
 ) {
-  const { sheetId } = await params;
+  const { sessionId } = await params;
 
-  if (!sheetId) {
-    return new Response(JSON.stringify({ error: "No sheetId provided" }), {
+  if (!sessionId) {
+    return new Response(JSON.stringify({ error: "No sessionId provided" }), {
       status: 400,
       headers: { "Content-Type": "application/json" },
     });
   }
 
-  const sheetFileContent = await redis.get(`${sheetId}/results`);
+  const sheetFileContent = await redis.get(`${sessionId}/sheet`);
 
   if (!sheetFileContent) {
     return new Response(JSON.stringify({ error: "Sheet not found" }), {
@@ -113,7 +112,7 @@ export async function GET(
   let csv = convertToCSV(dataArray);
   csv = "\uFEFF" + csv;
 
-  const filename = `${pdfFilename.replace(".csv", "")}.csv`;
+  const filename = `${pdfFilename.replace(".pdf", "")}.csv`;
 
   return new Response(csv, {
     status: 200,

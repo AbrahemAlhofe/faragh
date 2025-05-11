@@ -23,7 +23,7 @@ import { sleep } from '@/lib/utils';
 
 export default function Home() {
   const [file, setFile] = useState<File | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
   const [startPage, setStartPage] = useState(1);
   const [totalPages, setTotalPages] = useState(0);
   const [endPage, setEndPage] = useState(0);
@@ -54,39 +54,43 @@ export default function Home() {
 
   useEffect(() => {
 
-    let time = 500;
+    let time = 1000;
 
     (async () => {
 
       while (true) {
-        
-        if (isDone) break;
 
-        if (sessionId == null) return;
-  
-        const request = await fetch(`/api/sessions/${sessionId}/progress`, { method: 'GET' });
-        const { stage, cursor, progress, details } = await request.json();
-  
-        if (stage === 'IDLE') {
-          setProgressLabel(null)
-          setProgress(0);
-          setProgressDetails(null);
-        } else {
-          setPdfViewerCursor(cursor);
-          setProgress(progress);
-        }
-  
-        if (stage === 'SCANNING') setProgressLabel("جاري مسح ملف الـ PDF")
+        if (!(isUploading || isProcessing)) {
 
-        if (stage === 'EXTRACTING') {
+          if (isDone) break;
+  
+          if (sessionId == null) return;
+    
+          const request = await fetch(`/api/sessions/${sessionId}/progress`, { method: 'GET' });
+          const { stage, cursor, progress, details } = await request.json();
+    
+          if (stage === 'IDLE') {
+            setProgressLabel(null)
+            setProgress(0);
+            setProgressDetails(null);
+          } else {
+            setPdfViewerCursor(cursor);
+            setProgress(progress);
+          }
+    
+          if (stage === 'SCANNING') setProgressLabel("جاري مسح ملف الـ PDF")
+  
+          if (stage === 'EXTRACTING') {
+            
+            setProgressLabel("جاري إستخراج النص")
+  
+            setProgressDetails(JSON.parse(details));
           
-          setProgressLabel("جاري إستخراج النص")
+          }
+  
+          await sleep(time);
 
-          setProgressDetails(JSON.parse(details));
-        
-        }
-
-        await sleep(time);
+        }; 
   
       }
 
@@ -98,7 +102,7 @@ export default function Home() {
     const file = e.target.files?.[0];
     if (file && pdfJs) {
       try {
-        setIsLoading(true);
+        setIsUploading(true);
         const { sessionId } = await fetch("/api/sessions", { method: "GET" }).then(res => res.json());
         const pdf = await pdfJs.getDocument({ data: await file.arrayBuffer() }).promise;
         setSessionId(sessionId);
@@ -106,7 +110,7 @@ export default function Home() {
         setEndPage(pdf.numPages);
         pdf.destroy();
         setFile(file);
-        setIsLoading(false);
+        setIsUploading(false);
       } catch (error) {
         if (error instanceof Error) {
           toaster.create({
@@ -130,7 +134,7 @@ export default function Home() {
       return;
     }
 
-    setIsLoading(true);
+    setIsUploading(true);
     try {
 
       if (!file) {
@@ -168,14 +172,14 @@ export default function Home() {
     } catch (error: unknown) {
       if (error instanceof Error) {
         toaster.create({
-          title: 'خطأ في التحويل',
+          title: 'حدث خطأ أثناء إستخراج النص',
           description: error.message,
           type: 'error',
           duration: 3000,
         });
       }
     } finally {
-      setIsLoading(false);
+      setIsUploading(false);
       setIsProcessing(false);
     }
   };
@@ -212,8 +216,8 @@ export default function Home() {
           >
             <FileUpload.HiddenInput />
             <FileUpload.Dropzone flexGrow={1}>
-              {isLoading && <Spinner />}
-              {!isLoading && <>
+              {isUploading && <Spinner />}
+              {!isUploading && <>
                 <Icon size="md" color="fg.muted">
                   <LuUpload />
                 </Icon>
@@ -224,7 +228,7 @@ export default function Home() {
             </FileUpload.Dropzone>
           </FileUpload.Root> }
           {file != null && <PDFViewer file={file} cursor={pdfViewerCursor}></PDFViewer>}
-          { file != null && <Button onClick={handleConvert} loading={isLoading} variant="surface" width={'100%'}>
+          { file != null && <Button onClick={handleConvert} loading={isUploading} variant="surface" width={'100%'}>
             فرغ النص
           </Button> }
           { totalPages > 0 &&

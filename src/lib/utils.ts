@@ -1,3 +1,5 @@
+import { Message } from "./types";
+
 export function convertToCSV(data: any[]): string {
     if (data.length === 0) return "";
   
@@ -49,14 +51,37 @@ export function convertToCSV(data: any[]): string {
     return new Promise(resolve => setTimeout(resolve, ms));
   }
 
-  export async function tryCall(callback: (...args: any[]) => Promise<any>) {
+  export async function tryCall<T>(callback: (...args: any[]) => Promise<T>) {
     for (let attempt = 1; attempt <= 3; attempt++) {
       try {
         return await callback();
       } catch (error) {
+        console.warn(`[ ERROR ] try again ${3 - attempt} times more`);
         if (attempt === 3) {
           throw error; // or throw error
         }
       }
     }
   }
+
+export class ReadingMemory {
+  private memory: Message[] = [];
+  private maxLength: number;
+
+  constructor(maxLength: number) {
+    this.maxLength = maxLength;
+  }
+
+  push(message: Message) {
+    this.memory.push(message);
+    while (this.memory.length > this.maxLength * 2) this.memory.splice(0, 2);
+  }
+
+  toMessages(): Message[] {
+    return this.memory;
+  }
+
+  clear() {
+    this.memory = [];
+  }
+}
