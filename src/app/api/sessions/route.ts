@@ -1,10 +1,10 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import '@ungap/with-resolvers';
 import Redis from 'ioredis';
 
 const redis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379');
 
-export async function GET(req: NextRequest, { params }: { params: Promise<{ sessionId: string }> }) {
+export async function GET() {
 
     const sessionId = Math.random().toString(36).substring(2, 15);
 

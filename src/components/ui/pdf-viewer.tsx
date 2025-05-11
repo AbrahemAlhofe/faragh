@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 
 export default function PDFViewer({ file, cursor = 1 }: { file: File, cursor: number }) {
 
-    let [pdfDocument, setPdfDocument] = useState<any | null>(null);
+    const [pdfDocument, setPdfDocument] = useState<any | null>(null);
 
     useEffect(() => {
         let isMounted = true;

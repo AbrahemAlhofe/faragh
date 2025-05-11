@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import "@ungap/with-resolvers";
 import Redis from "ioredis";
-import { Line, SheetFile } from "@/lib/types";
+import { SheetFile } from "@/lib/types";
 import { useScanner, useSheeter } from "@/lib/serverHooks";
 import { convertToCSV, parallelReading } from "@/lib/utils";
 
@@ -45,7 +45,7 @@ export async function POST(
 
   const canvasFactory = document.canvasFactory;
   const [images, scan] = useScanner(canvasFactory, 1);
-  let scannedPages = [];
+  const scannedPages = [];
   await parallelReading(document.numPages, async (pageNum: number) => {
     const page = await document.getPage(pageNum);
     await scan(pageNum, page);
@@ -97,7 +97,7 @@ export async function GET(
   let sheetFile: SheetFile;
   try {
     sheetFile = JSON.parse(sheetFileContent) as SheetFile;
-  } catch (error) {
+  } catch (error: unknown) {
     return new Response(JSON.stringify({ error: "Invalid JSON data" }), {
       status: 500,
       headers: { "Content-Type": "application/json" },
