@@ -51,7 +51,7 @@ export function convertToCSV(data: any[]): string {
     return new Promise(resolve => setTimeout(resolve, ms));
   }
 
-  export async function tryCall<T>(callback: (...args: any[]) => Promise<T>) {
+  export async function tryCall<T>(callback: (...args: any[]) => Promise<T>, delay: number = 1000) {
     for (let attempt = 1; attempt <= 3; attempt++) {
       try {
         return await callback();
@@ -60,6 +60,7 @@ export function convertToCSV(data: any[]): string {
         if (attempt === 3) {
           throw error; // or throw error
         }
+        await sleep(delay * attempt);
       }
     }
   }

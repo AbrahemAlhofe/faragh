@@ -1,5 +1,6 @@
 "use client";
 
+import Head from 'next/head'
 import { useEffect, useState } from 'react';
 import {
   Box,
@@ -110,6 +111,7 @@ export default function Home() {
         setEndPage(pdf.numPages);
         pdf.destroy();
         setFile(file);
+        document.title = `فراغ استوديو | ${file.name.replace(".pdf", "")}`
         setIsUploading(false);
       } catch (error) {
         if (error instanceof Error) {
