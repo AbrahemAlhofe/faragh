@@ -29,3 +29,17 @@ export type Message = {
     }
   }>;
 }
+
+export enum SESSION_STAGES {
+  IDLE = 'IDLE',
+  READY = 'READY',
+  SCANNING = 'SCANNING',
+  EXTRACTING = 'EXTRACTING'
+}
+
+export type SessionProgress<T> = {
+  stage: SESSION_STAGES;
+  cursor: number;
+  progress: number;
+  details: T;
+}

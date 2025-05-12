@@ -2,9 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import "@ungap/with-resolvers";
 import Redis from "ioredis";
-import { SheetFile } from "@/lib/types";
+import { SessionProgress, SheetFile } from "@/lib/types";
 import { useScanner, useSheeter } from "@/lib/serverHooks";
 import { convertToCSV, parallelReading } from "@/lib/utils";
+import { del, PutBlobResult } from '@vercel/blob';
 
 const redis = new Redis(process.env.REDIS_URL || "redis://localhost:6379");
 
@@ -18,30 +19,14 @@ export async function POST(
     10
   );
   const endPage = parseInt(req.nextUrl.searchParams.get("endPage") || "1", 10);
-  const contentType = req.headers.get("content-type") || "";
+  const {details: sourceDetails}: SessionProgress<PutBlobResult> = JSON.parse(await redis.get(`${sessionId}/progress`) as string);
 
   await redis.set(
     `${sessionId}/progress`,
     JSON.stringify({ stage: "IDLE", cursor: 0 })
   );
 
-  if (!contentType.includes("multipart/form-data")) {
-    return NextResponse.json(
-      { error: "Unsupported Media Type" },
-      { status: 415 }
-    );
-  }
-
-  const formData = await req.formData();
-  const pdf = formData.get("pdf") as File;
-
-  if (!pdf) {
-    return NextResponse.json({ error: "No pdf uploaded" }, { status: 400 });
-  }
-
-  const arrayBuffer = await pdf.arrayBuffer();
-  const uint8Array = new Uint8Array(arrayBuffer);
-  const document = await getDocument({ data: uint8Array }).promise;
+  const document = await getDocument(sourceDetails.url).promise;
 
   const canvasFactory = document.canvasFactory;
   const [images, scan] = useScanner(canvasFactory, 1);
@@ -60,7 +45,7 @@ export async function POST(
     await redis.set(`${sessionId}/progress`, JSON.stringify({ stage: "EXTRACTING", cursor: i, progress: Math.floor((i / document.numPages) * 100), details: JSON.stringify(lines) }));
   }
 
-  const sheetFile: SheetFile = { pdfFilename: pdf.name, sheet };
+  const sheetFile: SheetFile = { pdfFilename: sourceDetails.pathname, sheet };
   await redis.set(
     `${sessionId}/sheet`,
     JSON.stringify(sheetFile),
@@ -68,6 +53,8 @@ export async function POST(
     60 * 60 * 5
   );
   const sheetUrl = new URL(`/api/sessions/${sessionId}`, req.url).toString();
+
+  await del(sourceDetails.url);
 
   return NextResponse.json({ sheetUrl }, { status: 200 });
 }

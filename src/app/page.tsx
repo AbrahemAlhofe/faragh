@@ -1,6 +1,5 @@
 "use client";
-
-import Head from 'next/head'
+import { upload } from '@vercel/blob/client';
 import { useEffect, useState } from 'react';
 import {
   Box,
@@ -18,7 +17,7 @@ import { Toaster, toaster } from '@/components/ui/toaster';
 import { FileUpload, Icon } from '@chakra-ui/react';
 import { LuDownload, LuUpload } from 'react-icons/lu';
 import Timer from '@/components/ui/timer';
-import { Line, PDFJs } from '@/lib/types';
+import { Line, PDFJs, SESSION_STAGES } from '@/lib/types';
 import PDFViewer from '@/components/ui/pdf-viewer';
 import { sleep } from '@/lib/utils';
 
@@ -70,7 +69,7 @@ export default function Home() {
           const request = await fetch(`/api/sessions/${sessionId}/progress`, { method: 'GET' });
           const { stage, cursor, progress, details } = await request.json();
     
-          if (stage === 'IDLE') {
+          if (stage === SESSION_STAGES.READY) {
             setProgressLabel(null)
             setProgress(0);
             setProgressDetails(null);
@@ -79,9 +78,9 @@ export default function Home() {
             setProgress(progress);
           }
     
-          if (stage === 'SCANNING') setProgressLabel("جاري مسح ملف الـ PDF")
+          if (stage === SESSION_STAGES.SCANNING) setProgressLabel("جاري مسح ملف الـ PDF")
   
-          if (stage === 'EXTRACTING') {
+          if (stage === SESSION_STAGES.EXTRACTING) {
             
             setProgressLabel("جاري إستخراج النص")
   
@@ -104,7 +103,8 @@ export default function Home() {
     if (file && pdfJs) {
       try {
         setIsUploading(true);
-        const { sessionId } = await fetch("/api/sessions", { method: "GET" }).then(res => res.json());
+        const uploadResponse = await upload(file.name, file, { access: 'public', handleUploadUrl: `/api/assets` });
+        const { sessionId } = await fetch(`/api/sessions`, { method: "POST", body: JSON.stringify(uploadResponse) }).then(res => res.json());
         const pdf = await pdfJs.getDocument({ data: await file.arrayBuffer() }).promise;
         setSessionId(sessionId);
         setTotalPages(pdf.numPages);
@@ -145,9 +145,7 @@ export default function Home() {
 
       setIsProcessing(true);
 
-      const formData = new FormData();
-      formData.append('pdf', file);
-      const request = await fetch(`/api/sessions/${sessionId}?startPage=${startPage}&endPage=${endPage}`, { method: 'POST', body: formData });
+      const request = await fetch(`/api/sessions/${sessionId}?startPage=${startPage}&endPage=${endPage}`, { method: 'POST' });
       const response = await request.json();
 
       if (request.ok) {

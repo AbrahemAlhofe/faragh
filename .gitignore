@@ -46,3 +46,5 @@ tmp
 !.env.example
 
 playground/*
+.vercel
+.env*.local
