@@ -1,5 +1,4 @@
 "use client";
-import { upload } from '@vercel/blob/client';
 import { useEffect, useState } from 'react';
 import {
   Box,
@@ -103,8 +102,7 @@ export default function Home() {
     if (file && pdfJs) {
       try {
         setIsUploading(true);
-        const uploadResponse = await upload(file.name, file, { access: 'public', handleUploadUrl: `/api/assets` });
-        const { sessionId } = await fetch(`/api/sessions`, { method: "POST", body: JSON.stringify(uploadResponse) }).then(res => res.json());
+        const { sessionId } = await fetch(`/api/sessions`, { method: "POST" }).then(res => res.json());
         const pdf = await pdfJs.getDocument({ data: await file.arrayBuffer() }).promise;
         setSessionId(sessionId);
         setTotalPages(pdf.numPages);
@@ -145,7 +143,9 @@ export default function Home() {
 
       setIsProcessing(true);
 
-      const request = await fetch(`/api/sessions/${sessionId}?startPage=${startPage}&endPage=${endPage}`, { method: 'POST' });
+      const formData = new FormData();
+      formData.append('file', file);
+      const request = await fetch(`/api/sessions/${sessionId}?startPage=${startPage}&endPage=${endPage}`, { method: 'POST', body: formData });
       const response = await request.json();
 
       if (request.ok) {

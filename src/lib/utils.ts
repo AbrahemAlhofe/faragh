@@ -86,3 +86,9 @@ export class ReadingMemory {
     this.memory = [];
   }
 }
+
+
+export function encodeRFC5987ValueChars(filename: string) {
+  return encodeURIComponent(filename)
+    .replace(/['()*]/g, c => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);
+}
