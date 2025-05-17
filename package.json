@@ -18,6 +18,7 @@
     "@types/pdfjs-dist": "^2.10.378",
     "@ungap/with-resolvers": "^0.1.0",
     "@vercel/blob": "^1.0.1",
+    "canvas": "^3.1.0",
     "content-disposition": "^0.5.4",
     "formidable": "^3.5.4",
     "ioredis": "^5.6.1",
