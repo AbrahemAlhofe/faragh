@@ -12,14 +12,22 @@ export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ sessionId: string }> }
 ) {
+
+  const { sessionId } = await params;
+  const [sheet, extract] = await useSheeter({ readingMemoryLimit: 15 });
+  const formData = await req.formData();
+  const file = formData.get("file") as File;
+
+  if (!file) return NextResponse.json({ error: "No file uploaded" }, { status: 400 });
+
   try {
 
-    const { sessionId } = await params;
     const startPage = parseInt(
       req.nextUrl.searchParams.get("startPage") || "1",
       10
     );
     const endPage = parseInt(req.nextUrl.searchParams.get("endPage") || "1", 10);
+    const totalPages = endPage - startPage + 1;
     const contentType = req.headers.get("content-type") || "";
     const sessionProgress: SessionProgress<{}> = { stage: SESSION_STAGES.IDLE, cursor: 1, progress: 0, details: [] }
 
@@ -35,13 +43,6 @@ export async function POST(
       );
     }
 
-    const formData = await req.formData();
-    const file = formData.get("file") as File;
-
-    if (!file) {
-      return NextResponse.json({ error: "No file uploaded" }, { status: 400 });
-    }
-
     const arrayBuffer = await file.arrayBuffer();
     const uint8Array = new Uint8Array(arrayBuffer);
     const document = await getDocument({ data: uint8Array }).promise;
@@ -54,16 +55,15 @@ export async function POST(
       const page = await document.getPage(pageNum);
       await scan(pageNum, page);
       scannedPages.push(pageNum);
-      await redis.set(`${sessionId}/progress`, JSON.stringify({ stage: "SCANNING", cursor: pageNum, progress: Math.floor((scannedPages.length / document.numPages) * 100), details: "" }));
+      await redis.set(`${sessionId}/progress`, JSON.stringify({ stage: "SCANNING", cursor: pageNum, progress: Math.floor((scannedPages.length / totalPages) * 100), details: "" }));
     });
   
-    const [sheet, extract] = await useSheeter({ readingMemoryLimit: 15 });
     for (let i = startPage; i <= endPage; i++) {
       const image = images(i) as string;
       const lines = await extract(i, image);
-      await redis.set(`${sessionId}/progress`, JSON.stringify({ stage: "EXTRACTING", cursor: i, progress: Math.floor((i / document.numPages) * 100), details: JSON.stringify(lines) }));
+      await redis.set(`${sessionId}/progress`, JSON.stringify({ stage: "EXTRACTING", cursor: i, progress: Math.floor((i / totalPages) * 100), details: JSON.stringify(lines) }));
     }
-  
+
     const sheetFile: SheetFile = { pdfFilename: file.name, sheet };
     await redis.set(
       `${sessionId}/sheet`,
@@ -74,13 +74,28 @@ export async function POST(
     const sheetUrl = new URL(`/api/sessions/${sessionId}`, req.url).toString();
   
     return NextResponse.json({ sheetUrl }, { status: 200 });
+
   } catch (error: unknown) {
-    if (error instanceof Error) {
-      return NextResponse.json({ error: "An error occurred", details: error.message }, { status: 500 });
-    } else {
-      return NextResponse.json({ error: "An error occurred", details: error }, { status: 500 });
-    }
+
+    const sheetFile: SheetFile = { pdfFilename: file.name, sheet };
+    await redis.set(
+      `${sessionId}/sheet`,
+      JSON.stringify(sheetFile),
+      "EX",
+      60 * 60 * 5
+    );
+    const sheetUrl = new URL(`/api/sessions/${sessionId}`, req.url).toString();
+
+    return NextResponse.json({
+      error: "An error occurred",
+      details: error instanceof Error
+        ? error.message
+        : error,
+      sheetUrl
+    }, { status: 500 });
+
   }
+
 }
 
 export async function GET(
