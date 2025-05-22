@@ -56,7 +56,7 @@ export function convertToCSV(data: any[]): string {
       try {
         return await callback();
       } catch (error) {
-        console.warn(`[ ERROR ] try again ${3 - attempt} times more`);
+        console.warn(`[ ERROR ] try again ${3 - attempt} times more : `, error);
         if (attempt === 3) {
           throw error; // or throw error
         }

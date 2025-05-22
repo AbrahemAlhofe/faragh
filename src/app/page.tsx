@@ -52,50 +52,55 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
+    if (!sessionId) return;
 
-    const time = 1000;
+    let active = true;
 
-    (async () => {
+    const poll = async () => {
+      if (!active) return;
 
-      while (true) {
+      if (!isProcessing) return;
 
-        if (!(isUploading || isProcessing)) {
+      try {
+        const request = await fetch(`/api/sessions/${sessionId}/progress`);
+        const { stage, cursor, progress, details } = await request.json();
 
-          if (isDone) break;
-  
-          if (sessionId == null) return;
-    
-          const request = await fetch(`/api/sessions/${sessionId}/progress`, { method: 'GET' });
-          const { stage, cursor, progress, details } = await request.json();
-    
-          if (stage === SESSION_STAGES.READY) {
-            setProgressLabel(null)
-            setProgress(0);
-            setProgressDetails(null);
-          } else {
-            setPdfViewerCursor(cursor);
-            setProgress(progress);
-          }
-    
-          if (stage === SESSION_STAGES.SCANNING) setProgressLabel("جاري مسح ملف الـ PDF")
-  
-          if (stage === SESSION_STAGES.EXTRACTING) {
-            
-            setProgressLabel("جاري إستخراج النص")
-  
-            setProgressDetails(JSON.parse(details));
-          
-          }
-  
-          await sleep(time);
+        if (stage === SESSION_STAGES.READY) {
+          setProgressLabel(null);
+          setProgress(0);
+          setProgressDetails(null);
+        } else {
+          setPdfViewerCursor(cursor);
+          setProgress(progress);
+        }
 
-        }; 
-  
+        if (stage === SESSION_STAGES.SCANNING) {
+          setProgressLabel("جاري مسح ملف الـ PDF");
+        }
+
+        if (stage === SESSION_STAGES.EXTRACTING) {
+          setProgressLabel("جاري إستخراج النص");
+          setProgressDetails(JSON.parse(details));
+        }
+
+        if (isDone) {
+          setIsDone(true);
+        }
+
+      } catch (error) {
+        console.error("Polling error:", error);
       }
 
-    })()
+      setTimeout(poll, 1000); // Schedule next poll
+    };
 
-  }, [sessionId]);
+    poll();
+
+    return () => {
+      active = false; // Cleanup: stop polling on unmount or sessionId change
+    };
+
+  }, [sessionId, isUploading, isProcessing]);
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
