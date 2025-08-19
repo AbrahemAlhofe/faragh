@@ -302,12 +302,12 @@ export default function Home() {
                 </HStack>
               </VStack>
               <HStack dir="rtl" gap={5}>
-                { isDone && <Button variant="surface" onClick={handleDownload}>
+                <Button variant="surface" onClick={handleDownload}>
                   <span>تنزيل الجدول</span>
                   <Icon size="md" color="fg.muted">
                     <LuDownload />
                   </Icon>
-                </Button> }
+                </Button>
                 <Timer running={isProcessing}></Timer>
               </HStack>
             </HStack>
