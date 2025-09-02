@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import "@ungap/with-resolvers";
 import Redis from "ioredis";
-import { SESSION_STAGES, SessionProgress, SheetFile } from "@/lib/types";
-import { useScanner, useSheeter } from "@/lib/serverHooks";
+import { ForeignNameRow, SESSION_STAGES, SessionProgress, SheetFile } from "@/lib/types";
+import { useForeignNamesExtractor, useScanner, useSheeter } from "@/lib/serverHooks";
 import { convertToCSV, parallelReading } from "@/lib/utils";
 
 const redis = new Redis(process.env.REDIS_URL || "redis://localhost:6379");
@@ -14,7 +14,7 @@ export async function POST(
 ) {
 
   const { sessionId } = await params;
-  const [sheet, extract] = await useSheeter({ readingMemoryLimit: 15 });
+  const [sheet, extract] = await useForeignNamesExtractor({ readingMemoryLimit: 1 });
   const formData = await req.formData();
   const file = formData.get("file") as File;
 
@@ -58,13 +58,15 @@ export async function POST(
       await redis.set(`${sessionId}/progress`, JSON.stringify({ stage: "SCANNING", cursor: pageNum, progress: Math.floor((scannedPages.length / totalPages) * 100), details: "" }));
     });
   
-    for (let i = startPage; i <= endPage; i++) {
-      const image = images(i) as string;
-      const lines = await extract(i, image);
-      await redis.set(`${sessionId}/progress`, JSON.stringify({ stage: "EXTRACTING", cursor: i, progress: Math.floor((i / totalPages) * 100), details: JSON.stringify(lines) }));
-    }
+    const extractedPages = [];
+    await parallelReading(document.numPages, async (pageNumber: number) => {
+      const image = images(pageNumber) as string;
+      const lines = await extract(pageNumber, image);
+      extractedPages.push(pageNumber);
+      await redis.set(`${sessionId}/progress`, JSON.stringify({ stage: "EXTRACTING", cursor: pageNumber, progress: Math.floor((extractedPages.length / totalPages) * 100), details: JSON.stringify(lines) }));
+    });
 
-    const sheetFile: SheetFile = { pdfFilename: file.name, sheet };
+    const sheetFile: SheetFile<ForeignNameRow> = { pdfFilename: file.name, sheet };
     await redis.set(
       `${sessionId}/sheet`,
       JSON.stringify(sheetFile),
@@ -77,7 +79,7 @@ export async function POST(
 
   } catch (error: unknown) {
 
-    const sheetFile: SheetFile = { pdfFilename: file.name, sheet };
+    const sheetFile: SheetFile<ForeignNameRow> = { pdfFilename: file.name, sheet };
     await redis.set(
       `${sessionId}/sheet`,
       JSON.stringify(sheetFile),
@@ -120,9 +122,9 @@ export async function GET(
     });
   }
 
-  let sheetFile: SheetFile;
+  let sheetFile: SheetFile<ForeignNameRow>;
   try {
-    sheetFile = JSON.parse(sheetFileContent) as SheetFile;
+    sheetFile = JSON.parse(sheetFileContent) as SheetFile<ForeignNameRow>;
   } catch (error: unknown) {
     return new Response(JSON.stringify({ error: "Invalid JSON data" }), {
       status: 500,

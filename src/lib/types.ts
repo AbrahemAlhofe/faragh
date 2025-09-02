@@ -1,18 +1,29 @@
-export type Line = {
-  ['الشخصية']: string;
-  ['النص']: string;
-  ['النبرة']: string;
-  ['المكان']: string;
-  ['الخلفية الصوتية']: string;
+type Row = {
   ['رقم الصفحة']: number;
   ['رقم النص']: number;
 }
 
-export type Sheet = Line[];
+export type LineRow = Row & {
+  ['الإسم بالعربي']: string;
+  ['الإسم باللغة الأجنبية']: string;
+  ['الرابط الأول']: string;
+  ['الرابط الثاني']: string;
+  ['الرابط الثالث']: string;
+}
 
-export type SheetFile = {
+export type ForeignNameRow = Row & {
+  ['الإسم بالعربي']: string;
+  ['الإسم باللغة الأجنبية']: string;
+  ['الرابط الأول']: string;
+  ['الرابط الثاني']: string;
+  ['الرابط الثالث']: string;
+}
+
+export type Sheet<T extends Row> = T[];
+
+export type SheetFile<T extends Row> = {
   pdfFilename: string;
-  sheet: Sheet;
+  sheet: Sheet<T>;
 }
 
 export type Summary = string;

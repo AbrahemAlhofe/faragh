@@ -16,7 +16,7 @@ import { Toaster, toaster } from '@/components/ui/toaster';
 import { FileUpload, Icon } from '@chakra-ui/react';
 import { LuDownload, LuUpload } from 'react-icons/lu';
 import Timer from '@/components/ui/timer';
-import { Line, PDFJs, SESSION_STAGES } from '@/lib/types';
+import { LineRow, PDFJs, SESSION_STAGES } from '@/lib/types';
 import PDFViewer from '@/components/ui/pdf-viewer';
 import { sleep } from '@/lib/utils';
 
@@ -33,7 +33,7 @@ export default function Home() {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [currentProgress, setProgress] = useState<number>(0); 
   const [progressLabel, setProgressLabel] = useState<string | null>(null);
-  const [progressDetails, setProgressDetails] = useState<Line[] | null>(null);
+  const [progressDetails, setProgressDetails] = useState<LineRow[] | null>(null);
   let pdfJs: PDFJs | null = null;
 
   useEffect(() => {
@@ -262,11 +262,11 @@ export default function Home() {
                 <Table.Row>
                   <Table.ColumnHeader>رقم الصفحة</Table.ColumnHeader>
                   <Table.ColumnHeader>رقم النص</Table.ColumnHeader>
-                  <Table.ColumnHeader>الشخصية</Table.ColumnHeader>
-                  <Table.ColumnHeader>النص</Table.ColumnHeader>
-                  <Table.ColumnHeader>النبرة</Table.ColumnHeader>
-                  <Table.ColumnHeader>المكان</Table.ColumnHeader>
-                  <Table.ColumnHeader>الخلفية الصوتية</Table.ColumnHeader>
+                  <Table.ColumnHeader>الإسم بالعربي</Table.ColumnHeader>
+                  <Table.ColumnHeader>الإسم باللغة الأجنبية</Table.ColumnHeader>
+                  <Table.ColumnHeader>الرابط الأول</Table.ColumnHeader>
+                  <Table.ColumnHeader>الرابط الثاني</Table.ColumnHeader>
+                  <Table.ColumnHeader>الرابط الثالث</Table.ColumnHeader>
                 </Table.Row>
               </Table.Header>
               <Table.Body>
@@ -274,11 +274,11 @@ export default function Home() {
                   <Table.Row key={index}>
                     <Table.Cell minWidth={"2vw"} whiteSpace={"wrap"}>{line['رقم الصفحة']}</Table.Cell>
                     <Table.Cell minWidth={"2vw"} whiteSpace={"wrap"}>{line['رقم النص']}</Table.Cell>
-                    <Table.Cell minWidth={"2vw"} whiteSpace={"wrap"}>{line['الشخصية']}</Table.Cell>
-                    <Table.Cell minWidth={"20vw"} whiteSpace={"wrap"}>{line['النص']}</Table.Cell>
-                    <Table.Cell minWidth={"10vw"} whiteSpace={"wrap"}>{line['النبرة']}</Table.Cell>
-                    <Table.Cell minWidth={"5vw"} whiteSpace={"wrap"}>{line['المكان']}</Table.Cell>
-                    <Table.Cell minWidth={"7vw"} whiteSpace={"wrap"}>{line['الخلفية الصوتية']}</Table.Cell>
+                    <Table.Cell minWidth={"2vw"} whiteSpace={"wrap"}>{line['الإسم بالعربي']}</Table.Cell>
+                    <Table.Cell minWidth={"2vw"} whiteSpace={"wrap"}>{line['الإسم باللغة الأجنبية']}</Table.Cell>
+                    <Table.Cell minWidth={"2vw"} whiteSpace={"wrap"}>{line['الرابط الأول']}</Table.Cell>
+                    <Table.Cell minWidth={"2vw"} whiteSpace={"wrap"}>{line['الرابط الثاني']}</Table.Cell>
+                    <Table.Cell minWidth={"2vw"} whiteSpace={"wrap"}>{line['الرابط الثالث']}</Table.Cell>
                   </Table.Row>
                 ))}
               </Table.Body>

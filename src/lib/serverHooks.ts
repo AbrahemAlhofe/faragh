@@ -2,7 +2,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import '@ungap/with-resolvers';
 import { PDFPageProxy } from 'pdfjs-dist/types/web/interfaces';
-import { Line } from '@/lib/types';
+import { LineRow } from '@/lib/types';
 import { ReadingMemory, tryCall } from './utils';
 import {GenerateContentResponse, GoogleGenAI, Type} from '@google/genai';
 
@@ -49,12 +49,12 @@ export function useScanner(
   ];
 }
 
-export async function useSheeter({ readingMemoryLimit }: { readingMemoryLimit: number } = { readingMemoryLimit: 10 }): Promise<[Line[], (key: number, image: string) => Promise<Line[]>]> {
+export async function useSheeter({ readingMemoryLimit }: { readingMemoryLimit: number } = { readingMemoryLimit: 10 }): Promise<[LineRow[], (key: number, image: string) => Promise<LineRow[]>]> {
   const conversation: ReadingMemory = new ReadingMemory(readingMemoryLimit ?? 10);
-  const sheet: Line[] = [];
+  const sheet: LineRow[] = [];
   const instructions = await fs.readFile(path.join('src/lib/prompts', 'sheetify.md'), 'utf-8');
 
-  async function extract(key: number, image: string): Promise<Line[]> {
+  async function extract(key: number, image: string): Promise<LineRow[]> {
 
     conversation.push({
       role: 'user',
@@ -118,8 +118,105 @@ export async function useSheeter({ readingMemoryLimit }: { readingMemoryLimit: n
 
     if (result === undefined) return [];
 
-    const responseObject: Omit<Line, 'رقم النص' | 'رقم الصفحة'>[] = JSON.parse(result.text as string);
-    const lines: Line[] = responseObject.map((line, index) => ({ ...line, ['رقم الصفحة']: key, ['رقم النص']: index + 1 }));
+    const responseObject: Omit<LineRow, 'رقم النص' | 'رقم الصفحة'>[] = JSON.parse(result.text as string);
+    const lines: LineRow[] = responseObject.map((line, index) => ({ ...line, ['رقم الصفحة']: key, ['رقم النص']: index + 1 }));
+
+    if ( responseObject.length === 0 ) return [];
+
+    try {
+      sheet.push(...lines);
+    } catch (err) {
+      console.error('Failed to parse assistant response:', responseObject, err);
+    }
+
+    // Add assistant message
+    conversation.push({
+      role: 'model',
+      parts: [
+        {
+          text: result.text
+        }
+      ]
+    });
+
+    return lines;
+
+  }
+
+  return [sheet, extract] as const;
+}
+
+export async function useForeignNamesExtractor({ readingMemoryLimit }: { readingMemoryLimit: number } = { readingMemoryLimit: 10 }): Promise<[LineRow[], (key: number, image: string) => Promise<LineRow[]>]> {
+  const conversation: ReadingMemory = new ReadingMemory(readingMemoryLimit ?? 10);
+  const sheet: LineRow[] = [];
+  const instructions = await fs.readFile(path.join('src/lib/prompts', 'foreign-name-extraction.md'), 'utf-8');
+
+  async function extract(key: number, image: string): Promise<LineRow[]> {
+
+    conversation.push({
+      role: 'user',
+      parts: [
+        {
+          fileData: {
+            fileUri: image,
+            mimeType: 'image/png',
+          }
+        }
+      ],
+    })
+
+    const result = await tryCall<GenerateContentResponse>(async () => {
+
+      console.log(`Start page ${key}`);
+          
+      const config = {
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              required: ['الإسم بالعربي', 'الإسم باللغة الأجنبية', 'الرابط الأول', 'الرابط الثاني', 'الرابط الثالث'],
+              properties: {
+                ['الإسم بالعربي']: {
+                  type: Type.STRING,
+                },
+                ['الإسم باللغة الأجنبية']: {
+                  type: Type.STRING,
+                },
+                ['الرابط الأول']: {
+                  type: Type.STRING,
+                },
+                ['الرابط الثاني']: {
+                  type: Type.STRING,
+                },
+                ['الرابط الثالث']: {
+                  type: Type.STRING,
+                }
+              },
+            },
+          },
+          systemInstruction: [
+              {
+                text: instructions,
+              }
+          ],
+        };
+
+        const model = 'gemini-2.5-flash';
+
+        const result = await ai.models.generateContent({
+          model,
+          config,
+          contents: conversation.toMessages(),
+        });
+
+        return result;
+    });
+
+    if (result === undefined) return [];
+
+    const responseObject: Omit<LineRow, 'رقم النص' | 'رقم الصفحة'>[] = JSON.parse(result.text as string);
+    const lines: LineRow[] = responseObject.map((line, index) => ({ ...line, ['رقم الصفحة']: key, ['رقم النص']: index + 1 }));
 
     if ( responseObject.length === 0 ) return [];
 
