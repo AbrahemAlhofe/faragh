@@ -10,15 +10,15 @@ import {
   Input,
   Field,
   Spinner,
-  Table
+  Table,
+  RadioCard
 } from '@chakra-ui/react';
 import { Toaster, toaster } from '@/components/ui/toaster';
 import { FileUpload, Icon } from '@chakra-ui/react';
 import { LuDownload, LuUpload } from 'react-icons/lu';
 import Timer from '@/components/ui/timer';
-import { LineRow, PDFJs, SESSION_STAGES } from '@/lib/types';
+import { ForeignNameRow, LineRow, PDFJs, SESSION_MODES, SESSION_STAGES } from '@/lib/types';
 import PDFViewer from '@/components/ui/pdf-viewer';
-import { sleep } from '@/lib/utils';
 
 export default function Home() {
   const [file, setFile] = useState<File | null>(null);
@@ -33,8 +33,14 @@ export default function Home() {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [currentProgress, setProgress] = useState<number>(0); 
   const [progressLabel, setProgressLabel] = useState<string | null>(null);
-  const [progressDetails, setProgressDetails] = useState<LineRow[] | null>(null);
+  const [progressDetails, setProgressDetails] = useState<LineRow[] | ForeignNameRow[] | null>(null);
+  const [selectedMode, setSelectedMode] = useState<SESSION_MODES | null>(SESSION_MODES.NAMES);
   let pdfJs: PDFJs | null = null;
+
+  const modes = [
+    { value: SESSION_MODES.NAMES, title: "الأسماء" },
+    { value: SESSION_MODES.LINES, title: "الجمل" }
+  ]
 
   useEffect(() => {
     
@@ -150,7 +156,7 @@ export default function Home() {
 
       const formData = new FormData();
       formData.append('file', file);
-      const request = await fetch(`/api/sessions/${sessionId}?startPage=${startPage}&endPage=${endPage}`, { method: 'POST', body: formData });
+      const request = await fetch(`/api/sessions/${sessionId}?startPage=${startPage}&endPage=${endPage}&mode=${selectedMode}`, { method: 'POST', body: formData });
       const response = await request.json();
 
       if (request.ok) {
@@ -253,12 +259,24 @@ export default function Home() {
                 </Field.Root>
               </HStack>
           }
+            <RadioCard.Root value={selectedMode} width="100%">
+              <HStack align="stretch">
+                {modes.map((mode) => (
+                  <RadioCard.Item key={mode.value} value={mode.value} flex="1" cursor={"pointer"}>
+                    <RadioCard.ItemHiddenInput />
+                    <RadioCard.ItemControl onClick={() => setSelectedMode(mode.value)}>
+                      <RadioCard.ItemText textAlign={"center"}>{mode.title}</RadioCard.ItemText>
+                    </RadioCard.ItemControl>
+                  </RadioCard.Item>
+                ))}
+              </HStack>
+            </RadioCard.Root>
         </VStack>
         <VStack gap={5} width={'80%'}> 
           <Box height={'100%'} width={'100%'} p={10} border={"2px dashed"} borderColor={"gray.800"} borderRadius={5}>
           { progressDetails !== null && <Table.ScrollArea height={'100%'} width={'100%'} p={0}>
             <Table.Root striped dir="rtl" stickyHeader>
-              <Table.Header>
+              { selectedMode === SESSION_MODES.NAMES && <Table.Header>
                 <Table.Row>
                   <Table.ColumnHeader>رقم الصفحة</Table.ColumnHeader>
                   <Table.ColumnHeader>رقم النص</Table.ColumnHeader>
@@ -268,20 +286,44 @@ export default function Home() {
                   <Table.ColumnHeader>الرابط الثاني</Table.ColumnHeader>
                   <Table.ColumnHeader>الرابط الثالث</Table.ColumnHeader>
                 </Table.Row>
-              </Table.Header>
-              <Table.Body>
-                {progressDetails.map((line, index) => (
+              </Table.Header> }
+              { selectedMode === SESSION_MODES.LINES && <Table.Header>
+                <Table.Row>
+                  <Table.ColumnHeader>رقم الصفحة</Table.ColumnHeader>
+                  <Table.ColumnHeader>رقم النص</Table.ColumnHeader>
+                  <Table.ColumnHeader>الشخصية</Table.ColumnHeader>
+                  <Table.ColumnHeader>النص</Table.ColumnHeader>
+                  <Table.ColumnHeader>النبرة</Table.ColumnHeader>
+                  <Table.ColumnHeader>المكان</Table.ColumnHeader>
+                  <Table.ColumnHeader>الخلفية الصوتية</Table.ColumnHeader>
+                </Table.Row>
+              </Table.Header> }
+              {selectedMode === SESSION_MODES.NAMES && <Table.Body>
+                {(progressDetails as ForeignNameRow[]).map((row, index) => (
                   <Table.Row key={index}>
-                    <Table.Cell minWidth={"2vw"} whiteSpace={"wrap"}>{line['رقم الصفحة']}</Table.Cell>
-                    <Table.Cell minWidth={"2vw"} whiteSpace={"wrap"}>{line['رقم النص']}</Table.Cell>
-                    <Table.Cell minWidth={"2vw"} whiteSpace={"wrap"}>{line['الإسم بالعربي']}</Table.Cell>
-                    <Table.Cell minWidth={"2vw"} whiteSpace={"wrap"}>{line['الإسم باللغة الأجنبية']}</Table.Cell>
-                    <Table.Cell minWidth={"2vw"} whiteSpace={"wrap"}>{line['الرابط الأول']}</Table.Cell>
-                    <Table.Cell minWidth={"2vw"} whiteSpace={"wrap"}>{line['الرابط الثاني']}</Table.Cell>
-                    <Table.Cell minWidth={"2vw"} whiteSpace={"wrap"}>{line['الرابط الثالث']}</Table.Cell>
+                    <Table.Cell minWidth={"2vw"} whiteSpace={"wrap"}>{row['رقم الصفحة']}</Table.Cell>
+                    <Table.Cell minWidth={"2vw"} whiteSpace={"wrap"}>{row['رقم النص']}</Table.Cell>
+                    <Table.Cell minWidth={"2vw"} whiteSpace={"wrap"}>{row['الإسم بالعربي']}</Table.Cell>
+                    <Table.Cell minWidth={"2vw"} whiteSpace={"wrap"}>{row['الإسم باللغة الأجنبية']}</Table.Cell>
+                    <Table.Cell minWidth={"2vw"} whiteSpace={"wrap"}>{row['الرابط الأول']}</Table.Cell>
+                    <Table.Cell minWidth={"2vw"} whiteSpace={"wrap"}>{row['الرابط الثاني']}</Table.Cell>
+                    <Table.Cell minWidth={"2vw"} whiteSpace={"wrap"}>{row['الرابط الثالث']}</Table.Cell>
                   </Table.Row>
                 ))}
-              </Table.Body>
+              </Table.Body>}
+              {selectedMode === SESSION_MODES.LINES && <Table.Body>
+                {(progressDetails as LineRow[]).map((row: LineRow, index) => (
+                  <Table.Row key={index}>
+                    <Table.Cell minWidth={"2vw"} whiteSpace={"wrap"}>{row['رقم الصفحة']}</Table.Cell>
+                    <Table.Cell minWidth={"2vw"} whiteSpace={"wrap"}>{row['رقم النص']}</Table.Cell>
+                    <Table.Cell minWidth={"2vw"} whiteSpace={"wrap"}>{row['الشخصية']}</Table.Cell>
+                    <Table.Cell minWidth={"20vw"} whiteSpace={"wrap"}>{row['النص']}</Table.Cell>
+                    <Table.Cell minWidth={"10vw"} whiteSpace={"wrap"}>{row['النبرة']}</Table.Cell>
+                    <Table.Cell minWidth={"5vw"} whiteSpace={"wrap"}>{row['المكان']}</Table.Cell>
+                    <Table.Cell minWidth={"7vw"} whiteSpace={"wrap"}>{row['الخلفية الصوتية']}</Table.Cell>
+                  </Table.Row>
+                ))}
+              </Table.Body>}
             </Table.Root> 
           </Table.ScrollArea> }
           </Box>

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import "@ungap/with-resolvers";
 import Redis from "ioredis";
-import { ForeignNameRow, SESSION_STAGES, SessionProgress, SheetFile } from "@/lib/types";
+import { ForeignNameRow, LineRow, SESSION_MODES, SESSION_STAGES, SessionProgress, SheetFile } from "@/lib/types";
 import { useForeignNamesExtractor, useScanner, useSheeter } from "@/lib/serverHooks";
 import { convertToCSV, parallelReading } from "@/lib/utils";
 
@@ -14,9 +14,9 @@ export async function POST(
 ) {
 
   const { sessionId } = await params;
-  const [sheet, extract] = await useForeignNamesExtractor({ readingMemoryLimit: 1 });
   const formData = await req.formData();
   const file = formData.get("file") as File;
+  let sheetFile: SheetFile<ForeignNameRow> | SheetFile<LineRow> = { pdfFilename: file.name, sheet: [] };
 
   if (!file) return NextResponse.json({ error: "No file uploaded" }, { status: 400 });
 
@@ -27,6 +27,7 @@ export async function POST(
       10
     );
     const endPage = parseInt(req.nextUrl.searchParams.get("endPage") || "1", 10);
+    const mode: SESSION_MODES = req.nextUrl.searchParams.get("mode") as SESSION_MODES || SESSION_MODES.NAMES;
     const totalPages = endPage - startPage + 1;
     const contentType = req.headers.get("content-type") || "";
     const sessionProgress: SessionProgress<{}> = { stage: SESSION_STAGES.IDLE, cursor: 1, progress: 0, details: [] }
@@ -57,16 +58,33 @@ export async function POST(
       scannedPages.push(pageNum);
       await redis.set(`${sessionId}/progress`, JSON.stringify({ stage: "SCANNING", cursor: pageNum, progress: Math.floor((scannedPages.length / totalPages) * 100), details: "" }));
     });
-  
-    const extractedPages = [];
-    await parallelReading(document.numPages, async (pageNumber: number) => {
-      const image = images(pageNumber) as string;
-      const lines = await extract(pageNumber, image);
-      extractedPages.push(pageNumber);
-      await redis.set(`${sessionId}/progress`, JSON.stringify({ stage: "EXTRACTING", cursor: pageNumber, progress: Math.floor((extractedPages.length / totalPages) * 100), details: JSON.stringify(lines) }));
-    });
 
-    const sheetFile: SheetFile<ForeignNameRow> = { pdfFilename: file.name, sheet };
+    if (mode === SESSION_MODES.NAMES) {
+
+      const extractedPages = [];
+      const [_sheet, extract] = await useForeignNamesExtractor({ readingMemoryLimit: 1 });
+      sheetFile =  { pdfFilename: file.name, sheet: _sheet };
+      await parallelReading(document.numPages, async (pageNumber: number) => {
+        const image = images(pageNumber) as string;
+        const lines = await extract(pageNumber, image);
+        extractedPages.push(pageNumber);
+        await redis.set(`${sessionId}/progress`, JSON.stringify({ stage: "EXTRACTING", cursor: pageNumber, progress: Math.floor((extractedPages.length / totalPages) * 100), details: JSON.stringify(lines) }));
+      });
+
+    }
+
+    if (mode === SESSION_MODES.LINES) {
+    
+      const [_sheet, extract] = await useSheeter({ readingMemoryLimit: 15 });
+      sheetFile =  { pdfFilename: file.name, sheet: _sheet };
+      for (let i = startPage; i <= endPage; i++) {
+        const image = images(i) as string;
+        const lines = await extract(i, image);
+        await redis.set(`${sessionId}/progress`, JSON.stringify({ stage: "EXTRACTING", cursor: i, progress: Math.floor((i / document.numPages) * 100), details: JSON.stringify(lines) }));
+      }
+    
+    }
+
     await redis.set(
       `${sessionId}/sheet`,
       JSON.stringify(sheetFile),
@@ -79,7 +97,6 @@ export async function POST(
 
   } catch (error: unknown) {
 
-    const sheetFile: SheetFile<ForeignNameRow> = { pdfFilename: file.name, sheet };
     await redis.set(
       `${sessionId}/sheet`,
       JSON.stringify(sheetFile),

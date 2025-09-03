@@ -4,11 +4,13 @@ type Row = {
 }
 
 export type LineRow = Row & {
-  ['الإسم بالعربي']: string;
-  ['الإسم باللغة الأجنبية']: string;
-  ['الرابط الأول']: string;
-  ['الرابط الثاني']: string;
-  ['الرابط الثالث']: string;
+  ['الشخصية']: string;
+  ['النص']: string;
+  ['النبرة']: string;
+  ['المكان']: string;
+  ['الخلفية الصوتية']: string;
+  ['رقم الصفحة']: number;
+  ['رقم النص']: number;
 }
 
 export type ForeignNameRow = Row & {
@@ -17,6 +19,11 @@ export type ForeignNameRow = Row & {
   ['الرابط الأول']: string;
   ['الرابط الثاني']: string;
   ['الرابط الثالث']: string;
+}
+
+export enum SESSION_MODES {
+  NAMES = 'names',
+  LINES = 'lines'
 }
 
 export type Sheet<T extends Row> = T[];

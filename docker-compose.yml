@@ -1,3 +1,5 @@
+version: "3.9"
+
 services:
   app:
     container_name: faragh-app
@@ -7,18 +9,28 @@ services:
     ports:
       - "3000:3000"
     volumes:
-      - .:/app
+      # bind mount your code
+      - .:/app:delegated
+      # keep container deps/build caches visible (not shadowed by the bind mount)
       - /app/node_modules
       - /app/.next
       - /app/.bun-cache
     environment:
       - NODE_ENV=development
+      - NEXT_TELEMETRY_DISABLED=1
       - REDIS_URL=redis://redis:6379
+      # make file watching reliable on macOS/Windows Docker Desktop
+      - WATCHPACK_POLLING=true
       - CHOKIDAR_USEPOLLING=true
+      - CHOKIDAR_INTERVAL=800
+      # quiets dev-socket warnings on some networks
+      - WDS_SOCKET_PORT=0
     depends_on:
-      - redis
+      redis:
+        condition: service_healthy
     networks:
       - app-network
+    restart: unless-stopped
 
   redis:
     container_name: faragh-redis
