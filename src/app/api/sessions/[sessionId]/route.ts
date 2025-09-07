@@ -91,7 +91,7 @@ export async function POST(
       "EX",
       60 * 60 * 5
     );
-    const sheetUrl = new URL(`/api/sessions/${sessionId}`, req.url).toString();
+    const sheetUrl = new URL(`/api/sessions/${sessionId}`, "http://localhost:3000").toString();
   
     return NextResponse.json({ sheetUrl }, { status: 200 });
 
@@ -103,7 +103,7 @@ export async function POST(
       "EX",
       60 * 60 * 5
     );
-    const sheetUrl = new URL(`/api/sessions/${sessionId}`, req.url).toString();
+    const sheetUrl = new URL(`/api/sessions/${sessionId}`, "http://localhost:3000").toString();
 
     return NextResponse.json({
       error: "An error occurred",

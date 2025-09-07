@@ -3,10 +3,13 @@ import path from 'path';
 import '@ungap/with-resolvers';
 import { PDFPageProxy } from 'pdfjs-dist/types/web/interfaces';
 import { LineRow } from '@/lib/types';
-import { ReadingMemory, tryCall } from './utils';
-import {GenerateContentResponse, GoogleGenAI, Type} from '@google/genai';
+import { ReadingMemory, tryCall } from "./utils";
+import { GoogleGenAI, Type } from "@google/genai";
+import { callAI, handleConversation } from "./ai";
 
-const ai = new GoogleGenAI({apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY});
+const ai = new GoogleGenAI({
+  apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY,
+});
 
 export function useScanner(
   canvasFactory: any,
@@ -68,76 +71,70 @@ export async function useSheeter({ readingMemoryLimit }: { readingMemoryLimit: n
       ],
     })
 
-    const result = await tryCall<GenerateContentResponse>(async () => {
-
-      console.log(`Start page ${key}`);
-          
-      const config = {
-          responseMimeType: 'application/json',
-          responseSchema: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              required: ['الشخصية', 'النص', 'النبرة', 'المكان', 'الخلفية الصوتية'],
-              properties: {
-                ['الشخصية']: {
-                  type: Type.STRING,
-                },
-                ['النص']: {
-                  type: Type.STRING,
-                },
-                ['النبرة']: {
-                  type: Type.STRING,
-                },
-                ['المكان']: {
-                  type: Type.STRING,
-                },
-                ['الخلفية الصوتية']: {
-                  type: Type.STRING,
-                },
-              },
+    const config = {
+      responseMimeType: "application/json",
+      responseSchema: {
+        type: Type.ARRAY,
+        items: {
+          type: Type.OBJECT,
+          required: [
+            "الشخصية",
+            "النص",
+            "النبرة",
+            "المكان",
+            "الخلفية الصوتية",
+          ],
+          properties: {
+            ["الشخصية"]: {
+              type: Type.STRING,
+            },
+            ["النص"]: {
+              type: Type.STRING,
+            },
+            ["النبرة"]: {
+              type: Type.STRING,
+            },
+            ["المكان"]: {
+              type: Type.STRING,
+            },
+            ["الخلفية الصوتية"]: {
+              type: Type.STRING,
             },
           },
-          systemInstruction: [
-              {
-                text: instructions,
-              }
-          ],
-        };
+        },
+      },
+      systemInstruction: {
+        role: "system",
+        parts: [
+          {
+            text: instructions,
+          },
+        ],
+      },
+    };
 
-        const model = 'gemini-2.5-flash';
+    const model = "gemini-2.5-flash";
 
-        const result = await ai.models.generateContent({
-          model,
-          config,
-          contents: conversation.toMessages(),
-        });
+    const result = await callAI(model, config, conversation);
+    const responseObject = handleConversation(result, conversation);
 
-        return result;
-    });
-
-    if (result === undefined) return [];
-
-    const responseObject: Omit<LineRow, 'رقم النص' | 'رقم الصفحة'>[] = JSON.parse(result.text as string);
-    const lines: LineRow[] = responseObject.map((line, index) => ({ ...line, ['رقم الصفحة']: key, ['رقم النص']: index + 1 }));
-
-    if ( responseObject.length === 0 ) return [];
+    const lines: LineRow[] = responseObject.map(
+      (line: Omit<LineRow, "رقم النص" | "رقم الصفحة">, index: number) => ({
+        ...line,
+        ["رقم الصفحة"]: key,
+        ["رقم النص"]: index + 1,
+      })
+    );
 
     try {
       sheet.push(...lines);
     } catch (err) {
-      console.error('Failed to parse assistant response:', responseObject, err);
+      console.error(
+        "Failed to parse assistant response:",
+        responseObject,
+        err
+      );
     }
-
-    // Add assistant message
-    conversation.push({
-      role: 'model',
-      parts: [
-        {
-          text: result.text
-        }
-      ]
-    });
 
     return lines;
 
@@ -165,76 +162,72 @@ export async function useForeignNamesExtractor({ readingMemoryLimit }: { reading
       ],
     })
 
-    const result = await tryCall<GenerateContentResponse>(async () => {
-
-      console.log(`Start page ${key}`);
-          
-      const config = {
-          responseMimeType: 'application/json',
-          responseSchema: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              required: ['الإسم بالعربي', 'الإسم باللغة الأجنبية', 'الرابط الأول', 'الرابط الثاني', 'الرابط الثالث'],
-              properties: {
-                ['الإسم بالعربي']: {
-                  type: Type.STRING,
-                },
-                ['الإسم باللغة الأجنبية']: {
-                  type: Type.STRING,
-                },
-                ['الرابط الأول']: {
-                  type: Type.STRING,
-                },
-                ['الرابط الثاني']: {
-                  type: Type.STRING,
-                },
-                ['الرابط الثالث']: {
-                  type: Type.STRING,
-                }
-              },
+    const config = {
+      responseMimeType: "application/json",
+      responseSchema: {
+        type: Type.ARRAY,
+        items: {
+          type: Type.OBJECT,
+          required: [
+            "الإسم بالعربي",
+            "الإسم باللغة الأجنبية",
+            "الرابط الأول",
+            "الرابط الثاني",
+            "الرابط الثالث",
+          ],
+          properties: {
+            ["الإسم بالعربي"]: {
+              type: Type.STRING,
+            },
+            ["الإسم باللغة الأجنبية"]: {
+              type: Type.STRING,
+            },
+            ["الرابط الأول"]: {
+              type: Type.STRING,
+            },
+            ["الرابط الثاني"]: {
+              type: Type.STRING,
+            },
+            ["الرابط الثالث"]: {
+              type: Type.STRING,
             },
           },
-          systemInstruction: [
-              {
-                text: instructions,
-              }
-          ],
-        };
+        },
+      },
+      systemInstruction: {
+        role: "system",
+        parts: [
+          {
+            text: instructions,
+          },
+        ],
+      },
+    };
 
-        const model = 'gemini-2.5-flash';
+    const model = "gemini-2.5-flash";
 
-        const result = await ai.models.generateContent({
-          model,
-          config,
-          contents: conversation.toMessages(),
-        });
+    const result = await callAI(model, config, conversation);
+    const responseObject = handleConversation(result, conversation);
 
-        return result;
-    });
+    const lines: LineRow[] = responseObject.map(
+      (line: Omit<LineRow, "رقم النص" | "رقم الصفحة">, index: number) => ({
+        ...line,
+        ["رقم الصفحة"]: key,
+        ["رقم النص"]: index + 1,
+      })
+    );
 
-    if (result === undefined) return [];
-
-    const responseObject: Omit<LineRow, 'رقم النص' | 'رقم الصفحة'>[] = JSON.parse(result.text as string);
-    const lines: LineRow[] = responseObject.map((line, index) => ({ ...line, ['رقم الصفحة']: key, ['رقم النص']: index + 1 }));
-
-    if ( responseObject.length === 0 ) return [];
+    if (responseObject.length === 0) return [];
 
     try {
       sheet.push(...lines);
     } catch (err) {
-      console.error('Failed to parse assistant response:', responseObject, err);
+      console.error(
+        "Failed to parse assistant response:",
+        responseObject,
+        err
+      );
     }
-
-    // Add assistant message
-    conversation.push({
-      role: 'model',
-      parts: [
-        {
-          text: result.text
-        }
-      ]
-    });
 
     return lines;
 
