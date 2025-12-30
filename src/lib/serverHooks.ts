@@ -10,7 +10,6 @@ import { callAI, handleConversation } from "./ai";
 const ai = new GoogleGenAI({
   apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY,
 });
-
 export function useScanner(
   canvasFactory: any,
   scale: number = 1
@@ -25,7 +24,7 @@ export function useScanner(
       key === undefined ? imagesCache : imagesCache[key],
 
     async (key: number, page: PDFPageProxy) => {
-      const viewport = page.getViewport({ scale });
+      const viewport = page.getViewport({ scale: Math.max(scale, 2) }); // Increase scale for better quality
       const canvasAndContext = canvasFactory.create(
         viewport.width,
         viewport.height
@@ -40,9 +39,12 @@ export function useScanner(
 
       const imageBuffer = canvasAndContext.canvas.toBuffer("image/png");
 
-      const file = await tryCall(async () => await ai.files.upload({ file: new Blob([imageBuffer]), config: { mimeType: "image/png" } }));
+      const file = await tryCall(async () => await ai.files.upload({ 
+        file: new Blob([imageBuffer]), 
+        config: { mimeType: "image/png" } 
+      }));
       
-      if ( file === undefined) throw new Error('Failed to upload image to Google Cloud Storage');
+      if (file === undefined) throw new Error('Failed to upload image to Google Cloud Storage');
 
       const uri = file.uri as string;
       imagesCache[key] = uri;

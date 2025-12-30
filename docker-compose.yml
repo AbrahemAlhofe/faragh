@@ -7,14 +7,14 @@ services:
       context: .
       dockerfile: Dockerfile.dev
     ports:
-      - "3000:3000"
+      - "8080:8080"
     volumes:
       # bind mount your code
       - .:/app:delegated
       # keep container deps/build caches visible (not shadowed by the bind mount)
       - /app/node_modules
       - /app/.next
-      - /app/.bun-cache
+      - pnpm_store:/root/.local/share/pnpm/store
     environment:
       - NODE_ENV=development
       - NEXT_TELEMETRY_DISABLED=1
@@ -49,6 +49,7 @@ services:
 
 volumes:
   redis_data:
+  pnpm_store:
 
 networks:
   app-network:

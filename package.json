@@ -3,9 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev -p 3000 -H 0.0.0.0",
+    "dev": "next dev -p 8080 -H 0.0.0.0",
     "build": "next build",
-    "start": "next start -p 3000 -H 0.0.0.0",
+    "start": "next start -p 8080 -H 0.0.0.0",
     "lint": "next lint"
   },
   "dependencies": {
@@ -32,7 +32,8 @@
     "react-dom": "^19.0.0",
     "react-icons": "^5.5.0",
     "sharp": "^0.34.1",
-    "uuid": "^11.1.0"
+    "uuid": "^11.1.0",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
@@ -40,6 +41,7 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@types/xlsx": "^0.0.35",
     "eslint": "^9",
     "eslint-config-next": "15.3.1",
     "typescript": "^5"

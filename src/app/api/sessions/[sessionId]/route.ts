@@ -4,7 +4,7 @@ import "@ungap/with-resolvers";
 import Redis from "ioredis";
 import { ForeignNameRow, LineRow, SESSION_MODES, SESSION_STAGES, SessionProgress, SheetFile } from "@/lib/types";
 import { useForeignNamesExtractor, useScanner, useSheeter } from "@/lib/serverHooks";
-import { convertToCSV, parallelReading } from "@/lib/utils";
+import { convertToXLSX, parallelReading } from "@/lib/utils";
 
 const redis = new Redis(process.env.REDIS_URL || "redis://localhost:6379");
 
@@ -61,16 +61,13 @@ export async function POST(
 
     if (mode === SESSION_MODES.NAMES) {
 
-      const extractedPages = [];
-      const [_sheet, extract] = await useForeignNamesExtractor({ readingMemoryLimit: 1 });
-      sheetFile =  { pdfFilename: file.name, sheet: _sheet };
-      await parallelReading(document.numPages, async (pageNumber: number) => {
-        const image = images(pageNumber) as string;
-        const lines = await extract(pageNumber, image);
-        extractedPages.push(pageNumber);
-        await redis.set(`${sessionId}/progress`, JSON.stringify({ stage: "EXTRACTING", cursor: pageNumber, progress: Math.floor((extractedPages.length / totalPages) * 100), details: JSON.stringify(lines) }));
-      });
-
+      const [_sheet, extract] = await useForeignNamesExtractor({ readingMemoryLimit: 100 });
+      for (let i = startPage; i <= endPage; i++) {
+        const image = images(i) as string;
+        const lines = await extract(i, image);
+        await redis.set(`${sessionId}/progress`, JSON.stringify({ stage: "EXTRACTING", cursor: i, progress: Math.floor((i / document.numPages) * 100), details: JSON.stringify(lines) }));
+      }
+    
     }
 
     if (mode === SESSION_MODES.LINES) {
@@ -91,7 +88,10 @@ export async function POST(
       "EX",
       60 * 60 * 5
     );
-    const sheetUrl = new URL(`/api/sessions/${sessionId}`, "http://localhost:3000").toString();
+    // Use host header instead of origin to avoid 0.0.0.0 in Docker
+    const protocol = req.nextUrl.protocol;
+    const host = req.headers.get("host") || req.nextUrl.host;
+    const sheetUrl = `${protocol}//${host}/api/sessions/${sessionId}`;
   
     return NextResponse.json({ sheetUrl }, { status: 200 });
 
@@ -103,7 +103,10 @@ export async function POST(
       "EX",
       60 * 60 * 5
     );
-    const sheetUrl = new URL(`/api/sessions/${sessionId}`, "http://localhost:3000").toString();
+    // Use host header instead of origin to avoid 0.0.0.0 in Docker
+    const protocol = req.nextUrl.protocol;
+    const host = req.headers.get("host") || req.nextUrl.host;
+    const sheetUrl = `${protocol}//${host}/api/sessions/${sessionId}`;
 
     return NextResponse.json({
       error: "An error occurred",
@@ -154,15 +157,14 @@ export async function GET(
   // Ensure jsonData is an array
   const dataArray = Array.isArray(sheet) ? sheet : [sheet];
 
-  let csv = convertToCSV(dataArray);
-  csv = "\uFEFF" + csv;
+  const xlsxBuffer = convertToXLSX(dataArray);
 
-  const filename = `${pdfFilename.replace(".pdf", "")}.csv`;
+  const filename = `${pdfFilename.replace(".pdf", "")}.xlsx`;
 
-  return new Response(csv, {
+  return new Response(new Uint8Array(xlsxBuffer), {
     status: 200,
     headers: {
-      "Content-Type": "text/csv; charset=utf-8",
+      "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       "Content-Disposition": `attachment; filename="${encodeURIComponent(
         filename
       )}"`,

@@ -3,7 +3,6 @@ import { Container, Spinner } from "@chakra-ui/react";
 import { useEffect, useState } from "react";
 
 export default function PDFViewer({ file, cursor = 1 }: { file: File, cursor: number }) {
-
     const [pdfDocument, setPdfDocument] = useState<any | null>(null);
 
     useEffect(() => {

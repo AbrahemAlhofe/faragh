@@ -35,7 +35,7 @@ export default function Home() {
   const [progressLabel, setProgressLabel] = useState<string | null>(null);
   const [progressDetails, setProgressDetails] = useState<LineRow[] | ForeignNameRow[] | null>(null);
   const [selectedMode, setSelectedMode] = useState<SESSION_MODES | null>(SESSION_MODES.NAMES);
-  let pdfJs: PDFJs | null = null;
+  const [pdfJs, setPdfJs] = useState<PDFJs | null>(null);
 
   const modes = [
     { value: SESSION_MODES.NAMES, title: "الأسماء" },
@@ -43,16 +43,20 @@ export default function Home() {
   ]
 
   useEffect(() => {
-    
+
     (async () => {
 
-      pdfJs = await import('pdfjs-dist');
-  
-      pdfJs.GlobalWorkerOptions.workerSrc = new URL(
+      console.log("Try loading PDFJs")
+
+      const loadedPdfJs = await import('pdfjs-dist');
+
+      loadedPdfJs.GlobalWorkerOptions.workerSrc = new URL(
         'pdfjs-dist/build/pdf.worker.mjs',
         import.meta.url
       ).toString();
-  
+
+      setPdfJs(loadedPdfJs);
+
     })()
 
   }, []);

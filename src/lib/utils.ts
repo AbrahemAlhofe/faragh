@@ -1,8 +1,9 @@
 import { Message } from "./types";
+import * as XLSX from 'xlsx';
 
 export function convertToCSV(data: any[]): string {
     if (data.length === 0) return "";
-  
+
     const headers = Object.keys(data[0]);
     const csvRows = [
       headers.join(","), // header row
@@ -14,9 +15,29 @@ export function convertToCSV(data: any[]): string {
         }).join(",")
       ),
     ];
-  
+
     return csvRows.join("\r\n");
   }
+
+export function convertToXLSX(data: any[]): Buffer {
+  if (data.length === 0) {
+    // Create empty workbook if no data
+    const workbook = XLSX.utils.book_new();
+    const worksheet = XLSX.utils.aoa_to_sheet([]);
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Sheet1');
+    return Buffer.from(XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' }));
+  }
+
+  // Convert JSON to worksheet
+  const worksheet = XLSX.utils.json_to_sheet(data);
+
+  // Create workbook and add worksheet
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, 'Sheet1');
+
+  // Generate buffer
+  return Buffer.from(XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' }));
+}
 
   export function parallelReading(num: number, callback: (index: number) => Promise<void>, startingIndex: number = 1) {
     const promises: Promise<void>[] = [];

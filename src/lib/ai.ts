@@ -14,10 +14,18 @@ export async function callAI(
   conversation: ReadingMemory
 ): Promise<GenerateContentResponse | undefined> {
   const result = await tryCall<GenerateContentResponse>(async () => {
+    const messages = conversation.toMessages();
+    
+    // Ensure the last message is from user role for Google Generative AI API
+    // If the last message is from "model", remove it as it will be added by the API response
+    const messagesToSend = messages.length > 0 && messages[messages.length - 1].role === "model"
+      ? messages.slice(0, -1)
+      : messages;
+    
     const result = await ai.models.generateContent({
       model,
       config,
-      contents: conversation.toMessages(),
+      contents: messagesToSend,
     });
     return result;
   });
