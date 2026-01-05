@@ -45,18 +45,9 @@ export default function Home() {
   useEffect(() => {
 
     (async () => {
-
-      console.log("Try loading PDFJs")
-
-      const loadedPdfJs = await import('pdfjs-dist');
-
-      loadedPdfJs.GlobalWorkerOptions.workerSrc = new URL(
-        'pdfjs-dist/build/pdf.worker.mjs',
-        import.meta.url
-      ).toString();
-
-      setPdfJs(loadedPdfJs);
-
+      const pdfjs = window.pdfjsLib as PDFJs;
+      window.pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdfjs-5.4.530-dist/build/pdf.worker.mjs';
+      setPdfJs(pdfjs);
     })()
 
   }, []);
@@ -218,6 +209,7 @@ export default function Home() {
 
   return (
     <Container fluid py={10} height={'100vh'} width={'100vw'} centerContent={true}>
+      <script src="/pdfjs-5.4.530-dist/build/pdf.mjs" type="module" />
       <Toaster />
       <HStack height={'100%'} width={'100%'} gap={10} alignItems={'stretch'}>
       <VStack gap={5} width={'20%'} height={'100%'} justifyContent={'space-between'}>
@@ -243,7 +235,7 @@ export default function Home() {
               </>}
             </FileUpload.Dropzone>
           </FileUpload.Root> }
-          {file != null && <PDFViewer file={file} cursor={pdfViewerCursor}></PDFViewer>}
+          {file != null && <PDFViewer engine={pdfJs} file={file} cursor={pdfViewerCursor}></PDFViewer>}
           { file != null && <Button onClick={handleConvert} loading={isUploading} variant="surface" width={'100%'}>
             فرغ النص
           </Button> }

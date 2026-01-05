@@ -2,7 +2,7 @@ import { base64ToBlob } from "@/lib/utils";
 import { Container, Spinner } from "@chakra-ui/react";
 import { useEffect, useState } from "react";
 
-export default function PDFViewer({ file, cursor = 1 }: { file: File, cursor: number }) {
+export default function PDFViewer({ engine, file, cursor = 1 }: { engine: typeof import('pdfjs-dist') | null, file: File, cursor: number }) {
     const [pdfDocument, setPdfDocument] = useState<any | null>(null);
 
     useEffect(() => {
@@ -10,14 +10,9 @@ export default function PDFViewer({ file, cursor = 1 }: { file: File, cursor: nu
         let localPdfDoc: any;
     
         (async () => {
-            const pdfJs = await import('pdfjs-dist');
-    
-            pdfJs.GlobalWorkerOptions.workerSrc = new URL(
-                'pdfjs-dist/build/pdf.worker.mjs',
-                import.meta.url
-            ).toString();
-    
-            localPdfDoc = await pdfJs.getDocument({ data: await file.arrayBuffer() }).promise;
+            if ( engine == null ) return;
+
+            localPdfDoc = await engine.getDocument({ data: await file.arrayBuffer() }).promise;
     
             if (isMounted) {
                 setPdfDocument(localPdfDoc);
