@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
-import "@ungap/with-resolvers";
 import Redis from "ioredis";
+import countPages from "page-count";
 import { ForeignNameRow, LineRow, SESSION_MODES, SESSION_STAGES, SessionProgress, SheetFile } from "@/lib/types";
 import { useForeignNamesExtractor, useScanner, useSheeter } from "@/lib/serverHooks";
 import { convertToXLSX, parallelReading } from "@/lib/utils";
@@ -44,17 +43,12 @@ export async function POST(
       );
     }
 
-    const arrayBuffer = await file.arrayBuffer();
-    const uint8Array = new Uint8Array(arrayBuffer);
-    const document = await getDocument({ data: uint8Array }).promise;
-  
-    const canvasFactory = document.canvasFactory;
-    const [images, scan] = useScanner(canvasFactory, 1);
+    const [images, scan] = useScanner(file);
+    const numberOfPages = await countPages(Buffer.from(await file.arrayBuffer()), 'pdf');
     const scannedPages = [];
-    await parallelReading(document.numPages, async (pageNum: number) => {
+    await parallelReading(numberOfPages, async (pageNum: number) => {
       if ( pageNum < startPage || pageNum > endPage ) return;
-      const page = await document.getPage(pageNum);
-      await scan(pageNum, page);
+      await scan(pageNum);
       scannedPages.push(pageNum);
       await redis.set(`${sessionId}/progress`, JSON.stringify({ stage: "SCANNING", cursor: pageNum, progress: Math.floor((scannedPages.length / totalPages) * 100), details: "" }));
     });
@@ -65,7 +59,7 @@ export async function POST(
       for (let i = startPage; i <= endPage; i++) {
         const image = images(i) as string;
         const lines = await extract(i, image);
-        await redis.set(`${sessionId}/progress`, JSON.stringify({ stage: "EXTRACTING", cursor: i, progress: Math.floor((i / document.numPages) * 100), details: JSON.stringify(lines) }));
+        await redis.set(`${sessionId}/progress`, JSON.stringify({ stage: "EXTRACTING", cursor: i, progress: Math.floor((i / numberOfPages) * 100), details: JSON.stringify(lines) }));
       }
     
     }
@@ -77,7 +71,7 @@ export async function POST(
       for (let i = startPage; i <= endPage; i++) {
         const image = images(i) as string;
         const lines = await extract(i, image);
-        await redis.set(`${sessionId}/progress`, JSON.stringify({ stage: "EXTRACTING", cursor: i, progress: Math.floor((i / document.numPages) * 100), details: JSON.stringify(lines) }));
+        await redis.set(`${sessionId}/progress`, JSON.stringify({ stage: "EXTRACTING", cursor: i, progress: Math.floor((i / numberOfPages) * 100), details: JSON.stringify(lines) }));
       }
     
     }

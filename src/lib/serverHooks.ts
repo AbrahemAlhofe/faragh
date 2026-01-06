@@ -6,48 +6,47 @@ import { LineRow } from '@/lib/types';
 import { ReadingMemory, tryCall } from "./utils";
 import { GoogleGenAI, Type } from "@google/genai";
 import { callAI, handleConversation } from "./ai";
+import { fromBuffer } from 'pdf2pic';
 
 const ai = new GoogleGenAI({
   apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY,
 });
 export function useScanner(
-  canvasFactory: any,
+  pdf: File,
   scale: number = 1
 ): [
-  (key?: number) => Record<number, string> | string,
-  (key: number, page: PDFPageProxy) => Promise<string>
+  (pageNumber?: number) => Record<number, string> | string, // get images cache or specific cached image
+  (pageNumber: number) => Promise<string> // render page to image and cache it
 ] {
   const imagesCache: Record<number, string> = {};
 
   return [
-    (key?: number) =>
-      key === undefined ? imagesCache : imagesCache[key],
+    (pageNumber?: number) =>
+      pageNumber === undefined ? imagesCache : imagesCache[pageNumber],
 
-    async (key: number, page: PDFPageProxy) => {
-      const viewport = page.getViewport({ scale: Math.max(scale, 2) }); // Increase scale for better quality
-      const canvasAndContext = canvasFactory.create(
-        viewport.width,
-        viewport.height
-      );
-      const renderContext = {
-        canvasContext: canvasAndContext.context,
-        viewport,
-      };
+    async (pageNumber: number) => {
+      const scanner = fromBuffer(Buffer.from(await pdf.arrayBuffer()), {
+        density: 72 * scale,
+        width: 600 * scale,
+        height: 800 * scale,
+      });
 
-      const renderTask = page.render(renderContext);
-      await renderTask.promise;
+      const imageBuffer = await scanner(pageNumber, { responseType: 'buffer' });
 
-      const imageBuffer = canvasAndContext.canvas.toBuffer("image/png");
+      const buffer = imageBuffer?.buffer;
+      if (!buffer) {
+        throw new Error(`Failed to render page ${pageNumber} to image`);
+      }
 
-      const file = await tryCall(async () => await ai.files.upload({ 
-        file: new Blob([imageBuffer]), 
-        config: { mimeType: "image/png" } 
+      const file = await tryCall(async () => await ai.files.upload({
+        file: new Blob([new Uint8Array(buffer)], { type: 'image/png' }),
+        config: { mimeType: "image/png" }
       }));
       
       if (file === undefined) throw new Error('Failed to upload image to Google Cloud Storage');
 
       const uri = file.uri as string;
-      imagesCache[key] = uri;
+      imagesCache[pageNumber] = uri;
 
       return uri;
     },

@@ -2,11 +2,10 @@ FROM node:20-bullseye
 RUN apt-get update && apt-get install -y \
     build-essential libcairo2-dev libpango1.0-dev libjpeg-dev libgif-dev librsvg2-dev \
  && rm -rf /var/lib/apt/lists/*
-RUN npm install -g pnpm
 WORKDIR /app
-COPY package.json pnpm-lock.yaml ./
-RUN pnpm install --frozen-lockfile
+COPY package*.json ./
+RUN npm install
 COPY . .
 ENV NODE_ENV=development NEXT_TELEMETRY_DISABLED=1
 EXPOSE 8080
-CMD ["pnpm", "run", "dev"]
+CMD ["npm", "run", "dev"]

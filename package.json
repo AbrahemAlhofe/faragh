@@ -25,6 +25,7 @@
     "mustache": "^4.2.0",
     "next": "^15.3.1",
     "next-themes": "^0.4.6",
+    "page-count": "^0.0.4",
     "pdf-lib": "^1.17.1",
     "pdf2pic": "^3.1.4",
     "pdfjs-dist": "5.4.530",
