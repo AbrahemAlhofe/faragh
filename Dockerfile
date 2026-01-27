@@ -6,6 +6,5 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm install
 COPY . .
-ENV NODE_ENV=development NEXT_TELEMETRY_DISABLED=1
 EXPOSE 8080
 CMD ["npm", "run", "dev"]
