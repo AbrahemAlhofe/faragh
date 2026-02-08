@@ -55,6 +55,7 @@ export async function POST(
     if (mode === SESSION_MODES.NAMES) {
 
       const [_sheet, extract] = await useForeignNamesExtractor({ readingMemoryLimit: 100 });
+      sheetFile = { pdfFilename: file.name, sheet: _sheet };
       for (let i = startPage; i <= endPage; i++) {
         const image = images(i) as string;
         const lines = await extract(i, image);

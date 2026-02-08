@@ -19,13 +19,14 @@ export function convertToCSV(data: any[]): string {
     return csvRows.join("\r\n");
   }
 
-export function convertToXLSX(data: any[]): Buffer {
+export function convertToXLSX(data: any[]): Uint8Array {
+
   if (data.length === 0) {
     // Create empty workbook if no data
     const workbook = XLSX.utils.book_new();
     const worksheet = XLSX.utils.aoa_to_sheet([]);
     XLSX.utils.book_append_sheet(workbook, worksheet, 'Sheet1');
-    return Buffer.from(XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' }));
+    return XLSX.write(workbook, { type: 'array', bookType: 'xlsx' });
   }
 
   // Convert JSON to worksheet
@@ -36,7 +37,7 @@ export function convertToXLSX(data: any[]): Buffer {
   XLSX.utils.book_append_sheet(workbook, worksheet, 'Sheet1');
 
   // Generate buffer
-  return Buffer.from(XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' }));
+  return XLSX.write(workbook, { type: 'array', bookType: 'xlsx' });
 }
 
   export function parallelReading(num: number, callback: (index: number) => Promise<void>, startingIndex: number = 1) {
