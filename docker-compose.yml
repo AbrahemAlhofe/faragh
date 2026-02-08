@@ -15,7 +15,8 @@ services:
     environment:
       - NODE_ENV=development
       - NEXT_TELEMETRY_DISABLED=1
-      - REDIS_URL=redis://redis:6379
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
       # make file watching reliable on macOS/Windows Docker Desktop
       - WATCHPACK_POLLING=true
       - CHOKIDAR_USEPOLLING=true

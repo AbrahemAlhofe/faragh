@@ -3,7 +3,10 @@ import '@ungap/with-resolvers';
 import Redis from 'ioredis';
 import { SESSION_STAGES, SessionProgress } from '@/lib/types';
 
-const redis = new Redis(process.env.REDIS_URL || 'redis://localhost:6379');
+const redis = new Redis(process.env.REDIS_PORT, process.env.REDIS_HOST, {
+    username: process.env.REDIS_USERNAME,
+    password: process.env.REDIS_PASSWORD,
+});
 
 export async function POST(req: NextRequest) {
 
