@@ -1,31 +1,37 @@
 import fs from 'fs/promises';
 import path from 'path';
 import '@ungap/with-resolvers';
-import { PDFPageProxy } from 'pdfjs-dist/types/web/interfaces';
 import { LineRow } from '@/lib/types';
 import { ReadingMemory, tryCall } from "./utils";
 import { GoogleGenAI, Type } from "@google/genai";
 import { callAI, handleConversation } from "./ai";
 import { fromBuffer } from 'pdf2pic';
+import countPages from 'page-count';
 
 const ai = new GoogleGenAI({
   apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY,
 });
-export function useScanner(
+export async function useScanner(
   pdf: File,
   scale: number = 1
-): [
-  (pageNumber?: number) => Record<number, string> | string, // get images cache or specific cached image
-  (pageNumber: number) => Promise<string> // render page to image and cache it
-] {
-  const imagesCache: Record<number, string> = {};
+): Promise<[
+    (pageNumber?: number) => Record<number, string> | string, // get images cache or specific cached image
+    number,
+    (pageNumber: number) => Promise<string> // render page to image and cache it
+  ]> {
+    const imagesCache: Record<number, string> = {};
+    const pdfBuffer = Buffer.from(await new Response(pdf).arrayBuffer());
+    const numberOfPages = await countPages(pdfBuffer, 'pdf');
 
   return [
     (pageNumber?: number) =>
       pageNumber === undefined ? imagesCache : imagesCache[pageNumber],
 
+    numberOfPages,
+
     async (pageNumber: number) => {
-      const scanner = fromBuffer(Buffer.from(await pdf.arrayBuffer()), {
+
+      const scanner = fromBuffer(pdfBuffer, {
         density: 72 * scale,
         width: 600 * scale,
         height: 800 * scale,
@@ -42,7 +48,7 @@ export function useScanner(
         file: new Blob([new Uint8Array(buffer)], { type: 'image/png' }),
         config: { mimeType: "image/png" }
       }));
-      
+
       if (file === undefined) throw new Error('Failed to upload image to Google Cloud Storage');
 
       const uri = file.uri as string;

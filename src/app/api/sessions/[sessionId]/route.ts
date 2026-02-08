@@ -43,8 +43,7 @@ export async function POST(
       );
     }
 
-    const [images, scan] = useScanner(file);
-    const numberOfPages = await countPages(Buffer.from(await file.arrayBuffer()), 'pdf');
+    const [images, numberOfPages, scan] = await useScanner(file);
     const scannedPages = [];
     await parallelReading(numberOfPages, async (pageNum: number) => {
       if ( pageNum < startPage || pageNum > endPage ) return;
