@@ -3,7 +3,11 @@ import '@ungap/with-resolvers';
 import Redis from 'ioredis';
 import { SESSION_STAGES, SessionProgress } from '@/lib/types';
 
-const redis = new Redis(process.env.REDIS_PORT, process.env.REDIS_HOST, {
+if (!process.env.REDIS_HOST || !process.env.REDIS_PORT) {
+    throw new Error('Missing Redis configuration in environment variables');
+}
+
+const redis = new Redis(Number(process.env.REDIS_PORT), process.env.REDIS_HOST, {
     username: process.env.REDIS_USERNAME,
     password: process.env.REDIS_PASSWORD,
 });
