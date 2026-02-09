@@ -1,7 +1,5 @@
-import Redis from "ioredis";
 import { NextRequest, NextResponse } from "next/server";
-
-const redis = new Redis(process.env.REDIS_URL || "redis://localhost:6379");
+import { getRedis } from "@/lib/utils";
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ sessionId: string }> }) {
   const { sessionId } = await params;
@@ -13,7 +11,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ sess
     });
   }
 
-  const progress = await redis.get(`${sessionId}/progress`);
+  const progress = await getRedis().get(`${sessionId}/progress`);
 
   if (!progress) {
     return new NextResponse(JSON.stringify({ error: "Session not found" }), {

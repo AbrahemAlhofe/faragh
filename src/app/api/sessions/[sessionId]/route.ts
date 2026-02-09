@@ -1,11 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import Redis from "ioredis";
 import countPages from "page-count";
 import { ForeignNameRow, LineRow, SESSION_MODES, SESSION_STAGES, SessionProgress, SheetFile } from "@/lib/types";
 import { useForeignNamesExtractor, useScanner, useSheeter } from "@/lib/serverHooks";
-import { convertToXLSX, parallelReading } from "@/lib/utils";
-
-const redis = new Redis(process.env.REDIS_URL || "redis://localhost:6379");
+import { convertToXLSX, parallelReading, getRedis } from "@/lib/utils";
 
 export async function POST(
   req: NextRequest,
@@ -31,7 +28,7 @@ export async function POST(
     const contentType = req.headers.get("content-type") || "";
     const sessionProgress: SessionProgress<{}> = { stage: SESSION_STAGES.IDLE, cursor: 1, progress: 0, details: [] }
 
-    await redis.set(
+    await getRedis().set(
       `${sessionId}/progress`,
       JSON.stringify(sessionProgress)
     );
@@ -49,7 +46,7 @@ export async function POST(
       if ( pageNum < startPage || pageNum > endPage ) return;
       await scan(pageNum);
       scannedPages.push(pageNum);
-      await redis.set(`${sessionId}/progress`, JSON.stringify({ stage: "SCANNING", cursor: pageNum, progress: Math.floor((scannedPages.length / totalPages) * 100), details: "" }));
+      await getRedis().set(`${sessionId}/progress`, JSON.stringify({ stage: "SCANNING", cursor: pageNum, progress: Math.floor((scannedPages.length / totalPages) * 100), details: "" }));
     });
 
     if (mode === SESSION_MODES.NAMES) {
@@ -59,24 +56,24 @@ export async function POST(
       for (let i = startPage; i <= endPage; i++) {
         const image = images(i) as string;
         const lines = await extract(i, image);
-        await redis.set(`${sessionId}/progress`, JSON.stringify({ stage: "EXTRACTING", cursor: i, progress: Math.floor((i / numberOfPages) * 100), details: JSON.stringify(lines) }));
+        await getRedis().set(`${sessionId}/progress`, JSON.stringify({ stage: "EXTRACTING", cursor: i, progress: Math.round(((i - startPage + 1) / totalPages) * 100), details: JSON.stringify(lines) }));
       }
-    
+
     }
 
     if (mode === SESSION_MODES.LINES) {
-    
+
       const [_sheet, extract] = await useSheeter({ readingMemoryLimit: 15 });
       sheetFile =  { pdfFilename: file.name, sheet: _sheet };
       for (let i = startPage; i <= endPage; i++) {
         const image = images(i) as string;
         const lines = await extract(i, image);
-        await redis.set(`${sessionId}/progress`, JSON.stringify({ stage: "EXTRACTING", cursor: i, progress: Math.floor((i / numberOfPages) * 100), details: JSON.stringify(lines) }));
+        await getRedis().set(`${sessionId}/progress`, JSON.stringify({ stage: "EXTRACTING", cursor: i, progress: Math.round(((i - startPage + 1) / totalPages) * 100), details: JSON.stringify(lines) }));
       }
     
     }
 
-    await redis.set(
+    await getRedis().set(
       `${sessionId}/sheet`,
       JSON.stringify(sheetFile),
       "EX",
@@ -91,7 +88,7 @@ export async function POST(
 
   } catch (error: unknown) {
 
-    await redis.set(
+    await getRedis().set(
       `${sessionId}/sheet`,
       JSON.stringify(sheetFile),
       "EX",
@@ -127,7 +124,7 @@ export async function GET(
     });
   }
 
-  const sheetFileContent = await redis.get(`${sessionId}/sheet`);
+  const sheetFileContent = await getRedis().get(`${sessionId}/sheet`);
 
   if (!sheetFileContent) {
     return new Response(JSON.stringify({ error: "Sheet not found" }), {

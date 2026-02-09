@@ -1,16 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import '@ungap/with-resolvers';
-import Redis from 'ioredis';
 import { SESSION_STAGES, SessionProgress } from '@/lib/types';
-
-if (!process.env.REDIS_HOST || !process.env.REDIS_PORT) {
-    throw new Error('Missing Redis configuration in environment variables');
-}
-
-const redis = new Redis(Number(process.env.REDIS_PORT), process.env.REDIS_HOST, {
-    username: process.env.REDIS_USERNAME,
-    password: process.env.REDIS_PASSWORD,
-});
+import { getRedis } from '@/lib/utils';
 
 export async function POST(req: NextRequest) {
 
@@ -23,7 +14,7 @@ export async function POST(req: NextRequest) {
         details: {}
     };
 
-    redis.set(`${sessionId}/progress`, JSON.stringify(sessionProgress));
+    getRedis().set(`${sessionId}/progress`, JSON.stringify(sessionProgress));
 
     return NextResponse.json({ sessionId });
 
