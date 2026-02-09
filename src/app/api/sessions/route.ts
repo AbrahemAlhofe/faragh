@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import '@ungap/with-resolvers';
 import { SESSION_STAGES, SessionProgress } from '@/lib/types';
-import { getRedis } from '@/lib/utils';
+import { getRedis } from '@/lib/redis';
 
 export async function POST(req: NextRequest) {
 
