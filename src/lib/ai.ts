@@ -4,9 +4,18 @@ import {
 } from "@google/genai";
 import { ReadingMemory, tryCall } from "./utils";
 
-const ai = new GoogleGenAI({
-  apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY,
-});
+let _ai: GoogleGenAI | null = null;
+
+export function getAI(): GoogleGenAI {
+  if (!_ai) {
+    const apiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+    if (!apiKey) {
+      throw new Error("GOOGLE_GENERATIVE_AI_API_KEY environment variable is not set");
+    }
+    _ai = new GoogleGenAI({ apiKey });
+  }
+  return _ai;
+}
 
 export async function callAI(
   model: string,
@@ -22,7 +31,7 @@ export async function callAI(
       ? messages.slice(0, -1)
       : messages;
     
-    const result = await ai.models.generateContent({
+    const result = await getAI().models.generateContent({
       model,
       config,
       contents: messagesToSend,

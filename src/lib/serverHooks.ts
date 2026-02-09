@@ -3,16 +3,11 @@ import path from 'path';
 import '@ungap/with-resolvers';
 import { LineRow } from '@/lib/types';
 import { ReadingMemory, tryCall } from "./utils";
-import { GoogleGenAI, Type } from "@google/genai";
-import { callAI, handleConversation } from "./ai";
+import { Type } from "@google/genai";
+import { callAI, getAI, handleConversation } from "./ai";
 import { fromBuffer } from 'pdf2pic';
 import countPages from 'page-count';
 
-console.log('GOOGLE_GENERATIVE_AI_API_KEY:', process.env.GOOGLE_GENERATIVE_AI_API_KEY ? '***' : 'Not Set');
-
-const ai = new GoogleGenAI({
-  apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY,
-});
 export async function useScanner(
   pdf: File,
   scale: number = 1
@@ -46,7 +41,7 @@ export async function useScanner(
         throw new Error(`Failed to render page ${pageNumber} to image`);
       }
 
-      const file = await tryCall(async () => await ai.files.upload({
+      const file = await tryCall(async () => await getAI().files.upload({
         file: new Blob([new Uint8Array(buffer)], { type: 'image/png' }),
         config: { mimeType: "image/png" }
       }));
