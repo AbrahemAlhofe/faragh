@@ -7,8 +7,6 @@ services:
     ports:
       - "8080:8080"
     volumes:
-      # bind mount your code
-      - .:/app:delegated
       # keep container deps/build caches visible (not shadowed by the bind mount)
       - /app/node_modules
       - /app/.next
@@ -17,12 +15,27 @@ services:
       - NEXT_TELEMETRY_DISABLED=1
       - REDIS_HOST=redis
       - REDIS_PORT=6379
-      # make file watching reliable on macOS/Windows Docker Desktop
-      - WATCHPACK_POLLING=true
-      - CHOKIDAR_USEPOLLING=true
-      - CHOKIDAR_INTERVAL=800
-      # quiets dev-socket warnings on some networks
-      - WDS_SOCKET_PORT=0
+    develop:
+      watch:
+        - action: sync
+          path: ./src
+          target: /app/src
+          ignore:
+            - node_modules/
+        - action: sync
+          path: ./public
+          target: /app/public
+        - action: sync+restart
+          path: ./next.config.ts
+          target: /app/next.config.ts
+        - action: sync+restart
+          path: ./postcss.config.mjs
+          target: /app/postcss.config.mjs
+        - action: sync+restart
+          path: ./tsconfig.json
+          target: /app/tsconfig.json
+        - action: rebuild
+          path: package.json
     depends_on:
       redis:
         condition: service_healthy
