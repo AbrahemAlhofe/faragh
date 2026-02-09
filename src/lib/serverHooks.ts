@@ -2,9 +2,9 @@ import fs from 'fs/promises';
 import path from 'path';
 import '@ungap/with-resolvers';
 import { LineRow } from '@/lib/types';
-import { ReadingMemory, tryCall } from "./utils";
+import { ReadingMemory } from "./utils";
 import { Type } from "@google/genai";
-import { callAI, getAI, handleConversation } from "./ai";
+import { callAI, handleConversation } from "./ai";
 import { fromBuffer } from 'pdf2pic';
 import countPages from 'page-count';
 
@@ -41,17 +41,10 @@ export async function useScanner(
         throw new Error(`Failed to render page ${pageNumber} to image`);
       }
 
-      const file = await tryCall(async () => await getAI().files.upload({
-        file: new Blob([new Uint8Array(buffer)], { type: 'image/png' }),
-        config: { mimeType: "image/png" }
-      }));
+      const base64 = Buffer.from(buffer).toString('base64');
+      imagesCache[pageNumber] = base64;
 
-      if (file === undefined) throw new Error('Failed to upload image to Google Cloud Storage');
-
-      const uri = file.uri as string;
-      imagesCache[pageNumber] = uri;
-
-      return uri;
+      return base64;
     },
   ];
 }
@@ -67,8 +60,8 @@ export async function useSheeter({ readingMemoryLimit }: { readingMemoryLimit: n
       role: 'user',
       parts: [
         {
-          fileData: {
-            fileUri: image,
+          inlineData: {
+            data: image,
             mimeType: 'image/png',
           }
         }
@@ -158,8 +151,8 @@ export async function useForeignNamesExtractor({ readingMemoryLimit }: { reading
       role: 'user',
       parts: [
         {
-          fileData: {
-            fileUri: image,
+          inlineData: {
+            data: image,
             mimeType: 'image/png',
           }
         }

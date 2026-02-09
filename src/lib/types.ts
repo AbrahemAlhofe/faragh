@@ -50,7 +50,11 @@ export type Message = {
     fileData?: {
       fileUri: string;
       mimeType: string;
-    }
+    };
+    inlineData?: {
+      data: string;
+      mimeType: string;
+    };
   }>;
 }
 
