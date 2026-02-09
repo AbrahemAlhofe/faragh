@@ -7,8 +7,6 @@ if (!process.env.REDIS_HOST || !process.env.REDIS_PORT) {
     throw new Error('Missing Redis configuration in environment variables');
 }
 
-console.log(process.env.REDIS_HOST, process.env.REDIS_PORT, process.env.REDIS_USERNAME, process.env.REDIS_PASSWORD);
-
 const redis = new Redis(Number(process.env.REDIS_PORT), process.env.REDIS_HOST, {
     username: process.env.REDIS_USERNAME,
     password: process.env.REDIS_PASSWORD,
