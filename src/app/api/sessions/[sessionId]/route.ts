@@ -5,6 +5,15 @@ import { useForeignNamesExtractor, useScanner, useSheeter } from "@/lib/serverHo
 import { convertToXLSX, parallelReading } from "@/lib/utils";
 import { getRedis } from "@/lib/redis";
 
+async function validateLink(url: string): Promise<string> {
+  try {
+    const response = await fetch(url, { method: "HEAD" });
+    return response.ok ? url : "Not Found";
+  } catch {
+    return "Not Found";
+  }
+}
+
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ sessionId: string }> }
@@ -57,6 +66,15 @@ export async function POST(
       for (let i = startPage; i <= endPage; i++) {
         const image = images(i) as string;
         const lines = await extract(i, image);
+        const validateLines = await Promise.all(
+          lines.map( async line => {
+            if(line["الرابط الأول"]) line["الرابط الأول"] = await validateLink(line["الرابط الأول"]);
+            if(line["الرابط الثاني"]) line["الرابط الثاني"] = await validateLink(line["الرابط الثاني"]);
+            if(line["الرابط الثالث"]) line["الرابط الثالث"] = await validateLink(line["الرابط الثالث"]);
+            return line;
+          })
+        )
+        sheetFile.sheet.push(...validateLines);
         await getRedis().set(`${sessionId}/progress`, JSON.stringify({ stage: "EXTRACTING", cursor: i, progress: Math.round(((i - startPage + 1) / totalPages) * 100), details: JSON.stringify(lines) }));
       }
 
