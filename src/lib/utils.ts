@@ -43,7 +43,7 @@ export function convertToXLSX(data: any[]): Uint8Array {
   const range = XLSX.utils.decode_range(worksheet["!ref"]!);
 
 for (let row = range.s.r + 1; row <= range.e.r; row++) {
-  for (let colIndex of linkIndexes) {
+  for (const colIndex of linkIndexes) {
 
     const cellAddress = XLSX.utils.encode_cell({ r: row, c: colIndex });
     const cell = worksheet[cellAddress];

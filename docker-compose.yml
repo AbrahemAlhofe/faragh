@@ -15,6 +15,7 @@ services:
       - NEXT_TELEMETRY_DISABLED=1
       - REDIS_HOST=redis
       - REDIS_PORT=6379
+      - GOOGLE_GENERATIVE_AI_API_KEY=${GOOGLE_GENERATIVE_AI_API_KEY}
     develop:
       watch:
         - action: sync
