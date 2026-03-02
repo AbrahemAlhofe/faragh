@@ -1,4 +1,4 @@
-type Row = {
+export type Row = {
   ['رقم الصفحة']: number;
   ['رقم النص']: number;
 }

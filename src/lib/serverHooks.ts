@@ -1,12 +1,13 @@
 import fs from 'fs/promises';
 import path from 'path';
 import '@ungap/with-resolvers';
-import { LineRow } from '@/lib/types';
+import { ForeignNameRow, LineRow, Row } from '@/lib/types';
 import { ReadingMemory } from "./utils";
 import { Type } from "@google/genai";
 import { callAI, handleConversation } from "./ai";
 import { fromBuffer } from 'pdf2pic';
 import countPages from 'page-count';
+import { inherits } from 'util';
 
 export async function useScanner(
   pdf: File,
@@ -140,12 +141,12 @@ export async function useSheeter({ readingMemoryLimit }: { readingMemoryLimit: n
   return [sheet, extract] as const;
 }
 
-export async function useForeignNamesExtractor({ readingMemoryLimit }: { readingMemoryLimit: number } = { readingMemoryLimit: 10 }): Promise<[LineRow[], (key: number, image: string) => Promise<LineRow[]>]> {
+export async function useForeignNamesExtractor({ readingMemoryLimit }: { readingMemoryLimit: number } = { readingMemoryLimit: 10 }): Promise<[ForeignNameRow[], (key: number, image: string) => Promise<ForeignNameRow[]>]> {
   const conversation: ReadingMemory = new ReadingMemory(readingMemoryLimit ?? 10);
-  const sheet: LineRow[] = [];
+  const sheet: ForeignNameRow[] = [];
   const instructions = await fs.readFile(path.join('src/lib/prompts', 'foreign-name-extraction.md'), 'utf-8');
 
-  async function extract(key: number, image: string): Promise<LineRow[]> {
+  async function extract(key: number, image: string): Promise<ForeignNameRow[]> {
 
     conversation.push({
       role: 'user',
@@ -206,8 +207,8 @@ export async function useForeignNamesExtractor({ readingMemoryLimit }: { reading
     const result = await callAI(model, config, conversation);
     const responseObject = handleConversation(result, conversation);
 
-    const lines: LineRow[] = responseObject.map(
-      (line: Omit<LineRow, "رقم النص" | "رقم الصفحة">, index: number) => ({
+    const lines: ForeignNameRow[] = responseObject.map(
+      (line: Omit<ForeignNameRow, "رقم النص" | "رقم الصفحة">, index: number) => ({
         ...line,
         ["رقم الصفحة"]: key,
         ["رقم النص"]: index + 1,
