@@ -32,6 +32,30 @@ export function convertToXLSX(data: any[]): Uint8Array {
   // Convert JSON to worksheet
   const worksheet = XLSX.utils.json_to_sheet(data);
 
+  const headers = Object.keys(data[0]);
+  const linkColumns = ['الرابط الأول', 'الرابط الثاني', 'الرابط الثالث'];
+
+  const linkIndexes = linkColumns
+  .map(col => headers.indexOf(col))
+  .filter(index => index !== -1);
+
+
+  const range = XLSX.utils.decode_range(worksheet["!ref"]!);
+
+for (let row = range.s.r + 1; row <= range.e.r; row++) {
+  for (let colIndex of linkIndexes) {
+
+    const cellAddress = XLSX.utils.encode_cell({ r: row, c: colIndex });
+    const cell = worksheet[cellAddress];
+
+    if (cell && cell.v) {
+      cell.l = { Target: cell.v };
+    }
+
+  }
+}
+  
+
   // Create workbook and add worksheet
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, worksheet, 'Sheet1');
