@@ -1,6 +1,32 @@
 import { Message } from "./types";
 import * as XLSX from 'xlsx';
 
+const ARTICLES = new Set(["a", "an", "the", "and", "of", "for"]);
+
+export function normalizeEnglishName(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, "")          // remove punctuation
+    .split(/\s+/)                         // words
+    .filter((w) => w && !ARTICLES.has(w)) // drop articles
+    .join(" ")
+    .trim();
+}
+
+export function filterSimilarEnglishNames<T extends { ["الإسم باللغة الأجنبية"]?: string }>(
+  sheet: T[]
+): T[] {
+  const seen = new Set<string>(); // to set unique normalized names
+  return sheet.filter((row) => {
+    const raw = row["الإسم باللغة الأجنبية"] ?? "";
+    const norm = normalizeEnglishName(raw);
+    if (!norm) return true;            // keep rows with an empty name
+    if (seen.has(norm)) return false;   // duplicate
+    seen.add(norm); // after checking, add to seen
+    return true;
+  });
+}
+
 export function convertToCSV(data: any[]): string {
     if (data.length === 0) return "";
 
@@ -42,19 +68,23 @@ export function convertToXLSX(data: any[]): Uint8Array {
 
   const range = XLSX.utils.decode_range(worksheet["!ref"]!);
 
-for (let row = range.s.r + 1; row <= range.e.r; row++) {
-  for (const colIndex of linkIndexes) {
+  for (let row = range.s.r + 1; row <= range.e.r; row++) {
+    for (const colIndex of linkIndexes) {
+      const cellAddress = XLSX.utils.encode_cell({ r: row, c: colIndex });
+      const cell = worksheet[cellAddress];
 
-    const cellAddress = XLSX.utils.encode_cell({ r: row, c: colIndex });
-    const cell = worksheet[cellAddress];
-
-    if (cell && cell.v) {
-      cell.l = { Target: cell.v };
+      // Only add hyperlink if cell has a valid URL
+      if (cell && cell.v && typeof cell.v === 'string') {
+        const url = cell.v.trim();
+        // Check if it's a valid URL (starts with http:// or https://)
+        if (url.startsWith('http://') || url.startsWith('https://')) {
+          cell.l = { Target: url, Tooltip: url };
+          // Ensure the display text is set to the URL
+          cell.v = url;
+        }
+      }
     }
-
   }
-}
-  
 
   // Create workbook and add worksheet
   const workbook = XLSX.utils.book_new();

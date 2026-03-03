@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import countPages from "page-count";
 import { ForeignNameRow, LineRow, SESSION_MODES, SESSION_STAGES, SessionProgress, SheetFile } from "@/lib/types";
 import { useForeignNamesExtractor, useScanner, useSheeter } from "@/lib/serverHooks";
-import { convertToXLSX, parallelReading } from "@/lib/utils";
+import { convertToXLSX, filterSimilarEnglishNames, parallelReading } from "@/lib/utils";
 import { getRedis } from "@/lib/redis";
 
 async function validateLink(url: string): Promise<string> {
@@ -167,7 +167,8 @@ export async function GET(
   // Ensure jsonData is an array
   const dataArray = Array.isArray(sheet) ? sheet : [sheet];
 
-  const xlsxBuffer = convertToXLSX(dataArray);
+  const filtered = filterSimilarEnglishNames(dataArray);
+  const xlsxBuffer = convertToXLSX(filtered);
 
   const filename = `${pdfFilename.replace(".pdf", "")}.xlsx`;
 
