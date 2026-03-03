@@ -18,6 +18,7 @@ import { FileUpload, Icon } from '@chakra-ui/react';
 import { LuDownload, LuUpload } from 'react-icons/lu';
 import Timer from '@/components/ui/timer';
 import { ForeignNameRow, LineRow, PDFJs, SESSION_MODES, SESSION_STAGES } from '@/lib/types';
+import { filterSimilarEnglishNames } from '@/lib/utils';
 import PDFViewer from '@/components/ui/pdf-viewer';
 
 export default function Home() {
@@ -81,7 +82,12 @@ export default function Home() {
 
         if (stage === SESSION_STAGES.EXTRACTING) {
           setProgressLabel("جاري إستخراج النص");
-          setProgressDetails(JSON.parse(details));
+          const parsedDetails = JSON.parse(details);
+          // Apply filter for duplicate English names if in NAMES mode
+          const filteredDetails = selectedMode === SESSION_MODES.NAMES 
+            ? filterSimilarEnglishNames(parsedDetails)
+            : parsedDetails;
+          setProgressDetails(filteredDetails);
         }
 
         if (isDone) {

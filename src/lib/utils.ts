@@ -1,30 +1,52 @@
 import { Message } from "./types";
 import * as XLSX from 'xlsx';
 
-const ARTICLES = new Set(["a", "an", "the", "and", "of", "for"]);
+const ARTICLES = new Set(["a", "an", "the", "and", "of", "for", "in", "on", "to", "is", "at", "by"]);
 
 export function normalizeEnglishName(name: string): string {
+  if (!name || typeof name !== 'string') return '';
+  
   return name
     .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, "")          // remove punctuation
-    .split(/\s+/)                         // words
-    .filter((w) => w && !ARTICLES.has(w)) // drop articles
-    .join(" ")
-    .trim();
+    .trim()
+    .replace(/[^\w\s]/g, '')              // remove all punctuation/special chars
+    .split(/\s+/)                         // split into words
+    .filter((w) => w && !ARTICLES.has(w)) // remove articles and empty strings
+    .sort()                               // sort words alphabetically to handle different orders
+    .join('|');                           // join with special separator for clarity
 }
 
 export function filterSimilarEnglishNames<T extends { ["الإسم باللغة الأجنبية"]?: string }>(
   sheet: T[]
 ): T[] {
-  const seen = new Set<string>(); // to set unique normalized names
-  return sheet.filter((row) => {
+  const seen = new Set<string>();
+  const filtered: T[] = [];
+  
+  for (const row of sheet) {
     const raw = row["الإسم باللغة الأجنبية"] ?? "";
     const norm = normalizeEnglishName(raw);
-    if (!norm) return true;            // keep rows with an empty name
-    if (seen.has(norm)) return false;   // duplicate
-    seen.add(norm); // after checking, add to seen
-    return true;
-  });
+    
+    // Debug log
+    if (raw) console.log(`[FILTER] "${raw}" -> "${norm}"`);
+    
+    if (!norm) {
+      // Keep rows with empty English names
+      filtered.push(row);
+      continue;
+    }
+    
+    if (seen.has(norm)) {
+      console.log(`[FILTER] Duplicate detected, skipping`);
+      continue;
+    }
+    
+    console.log(`[FILTER] NEW - keeping this row`);
+    seen.add(norm);
+    filtered.push(row);
+  }
+  
+  console.log(`[FILTER] Total rows: ${sheet.length}, Filtered rows: ${filtered.length}`);
+  return filtered;
 }
 
 export function convertToCSV(data: any[]): string {

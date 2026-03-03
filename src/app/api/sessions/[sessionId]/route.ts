@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import countPages from "page-count";
 import { ForeignNameRow, LineRow, SESSION_MODES, SESSION_STAGES, SessionProgress, SheetFile } from "@/lib/types";
 import { useForeignNamesExtractor, useScanner, useSheeter } from "@/lib/serverHooks";
-import { convertToXLSX, filterSimilarEnglishNames, parallelReading } from "@/lib/utils";
+import { convertToXLSX, filterSimilarEnglishNames, normalizeEnglishName, parallelReading } from "@/lib/utils";
 import { getRedis } from "@/lib/redis";
 
 async function validateLink(url: string): Promise<string> {
@@ -34,6 +34,12 @@ export async function POST(
     );
     const endPage = parseInt(req.nextUrl.searchParams.get("endPage") || "1", 10);
     const mode: SESSION_MODES = req.nextUrl.searchParams.get("mode") as SESSION_MODES || SESSION_MODES.NAMES;
+    
+    console.log(`\n=== POST REQUEST START ===`);
+    console.log(`[POST] sessionId: ${sessionId}`);
+    console.log(`[POST] mode: ${mode}`);
+    console.log(`[POST] pages: ${startPage}-${endPage}`);
+    
     const totalPages = endPage - startPage + 1;
     const contentType = req.headers.get("content-type") || "";
     const sessionProgress: SessionProgress<{}> = { stage: SESSION_STAGES.IDLE, cursor: 1, progress: 0, details: [] }
@@ -60,9 +66,14 @@ export async function POST(
     });
 
     if (mode === SESSION_MODES.NAMES) {
+      console.log(`[POST NAMES] Starting extraction...`);
 
       const [_sheet, extract] = await useForeignNamesExtractor({ readingMemoryLimit: 100 });
       sheetFile = { pdfFilename: file.name, sheet: _sheet };
+      console.log(`[POST NAMES] Initial sheet from extractor: ${sheetFile.sheet.length} rows`);
+      
+      const seenNames = new Set<string>(); // Track normalized names we've already added
+      
       for (let i = startPage; i <= endPage; i++) {
         const image = images(i) as string;
         const lines = await extract(i, image);
@@ -74,8 +85,35 @@ export async function POST(
             return line;
           })
         )
-        sheetFile.sheet.push(...validateLines);
-        await getRedis().set(`${sessionId}/progress`, JSON.stringify({ stage: "EXTRACTING", cursor: i, progress: Math.round(((i - startPage + 1) / totalPages) * 100), details: JSON.stringify(lines) }));
+        
+        // Filter out duplicates before adding to sheet
+        const uniqueLines = validateLines.filter((line) => {
+          const englishName = line["الإسم باللغة الأجنبية"] ?? "";
+          const normalized = normalizeEnglishName(englishName);
+          
+          console.log(`[EXTRACT] Raw: "${englishName}" | Normalized: "${normalized}" | Already seen: ${seenNames.has(normalized)}`);
+          
+          if (!normalized) {
+            // Keep rows with no English name
+            console.log(`[EXTRACT] -> KEEPING (empty name)`);
+            return true;
+          }
+          
+          if (seenNames.has(normalized)) {
+            // Skip if we already have this normalized name
+            console.log(`[EXTRACT] -> SKIPPING (duplicate)`);
+            return false;
+          }
+          
+          // First time seeing this name, add to set and keep the row
+          seenNames.add(normalized);
+          console.log(`[EXTRACT] -> KEEPING (new)`);
+          return true;
+        });
+        
+        console.log(`[EXTRACT] Page ${i}: Extracted ${validateLines.length}, Keeping ${uniqueLines.length}, Duplicates removed: ${validateLines.length - uniqueLines.length}`);
+        sheetFile.sheet.push(...uniqueLines);
+        await getRedis().set(`${sessionId}/progress`, JSON.stringify({ stage: "EXTRACTING", cursor: i, progress: Math.round(((i - startPage + 1) / totalPages) * 100), details: JSON.stringify(uniqueLines) }));
       }
 
     }
@@ -92,6 +130,9 @@ export async function POST(
     
     }
 
+    console.log(`[POST] Final sheet size: ${sheetFile.sheet.length} rows`);
+    console.log(`[POST] Saving to Redis at key: ${sessionId}/sheet`);
+    
     await getRedis().set(
       `${sessionId}/sheet`,
       JSON.stringify(sheetFile),
@@ -167,7 +208,14 @@ export async function GET(
   // Ensure jsonData is an array
   const dataArray = Array.isArray(sheet) ? sheet : [sheet];
 
+  console.log(`[GET /api/sessions/${sessionId}] Starting download...`);
+  console.log(`[GET] Data array length BEFORE filter: ${dataArray.length}`);
+  
   const filtered = filterSimilarEnglishNames(dataArray);
+  
+  console.log(`[GET] Data array length AFTER filter: ${filtered.length}`);
+  console.log(`[GET] Removed ${dataArray.length - filtered.length} duplicate rows`);
+  
   const xlsxBuffer = convertToXLSX(filtered);
 
   const filename = `${pdfFilename.replace(".pdf", "")}.xlsx`;
