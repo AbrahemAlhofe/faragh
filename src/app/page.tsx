@@ -334,12 +334,12 @@ export default function Home() {
             { totalPages > 0 && 
               <HStack gap={5} width={'100%'} height={'3em'} justifyContent={'space-between'}>
                 <VStack alignItems={'flex-start'} >
-                  <Progress.Root width="md" max={100} value={currentProgress}>
+                  <Progress.Root width="md" max={100} value={isDone ? 100 : currentProgress} colorPalette={isDone ? "green" : "blue"}>
                     <HStack gap="5">
                       <Progress.Track flex="1">
                         <Progress.Range />
                       </Progress.Track>
-                      <Progress.ValueText>{currentProgress}%</Progress.ValueText>
+                      <Progress.ValueText>{isDone ? 100 : currentProgress}%</Progress.ValueText>
                     </HStack>
                   </Progress.Root>
                   <HStack fontSize={'sm'} color="gray.500">
