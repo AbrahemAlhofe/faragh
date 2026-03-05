@@ -11,7 +11,8 @@ import {
   Field,
   Spinner,
   Table,
-  RadioCard
+  RadioCard,
+  Badge
 } from '@chakra-ui/react';
 import { Toaster, toaster } from '@/components/ui/toaster';
 import { FileUpload, Icon } from '@chakra-ui/react';
@@ -217,147 +218,150 @@ export default function Home() {
     <Container fluid py={10} height={'100vh'} width={'100vw'} centerContent={true}>
       <script src="/pdfjs-5.4.530-dist/build/pdf.mjs" type="module" async />
       <Toaster />
-      <HStack height={'100%'} width={'100%'} gap={10} alignItems={'stretch'}>
-      <VStack gap={5} width={'20%'} height={'100%'} justifyContent={'space-between'}>
-          {file == null && <FileUpload.Root
-            accept={["application/pdf"]}
-            alignItems="stretch"
-            flexGrow={1}
-            maxFiles={10}
-            onChange={handleFileChange}
-            width={'20vw'}
-            height={'65vh'}
-          >
-            <FileUpload.HiddenInput />
-            <FileUpload.Dropzone flexGrow={1}>
-              {isUploading && <Spinner />}
-              {!isUploading && <>
-                <Icon size="md" color="fg.muted">
-                  <LuUpload />
-                </Icon>
-                <FileUpload.DropzoneContent>
-                  <Box>Drag and drop pdf here</Box>
-                </FileUpload.DropzoneContent>
-              </>}
-            </FileUpload.Dropzone>
-          </FileUpload.Root> }
-          {file != null && <PDFViewer engine={pdfJs} file={file} cursor={pdfViewerCursor}></PDFViewer>}
-          { file != null && <Button onClick={handleConvert} loading={isUploading} variant="surface" width={'100%'}>
-            فرغ النص
-          </Button> }
-          { totalPages > 0 &&
-            <HStack dir="rtl" gap={5} width={'20vw'} justifyContent={'space-between'}>
-                <Field.Root>
-                  <Field.Label>
-                    صفحة البداية
-                  </Field.Label>
-                  <Input type="number" min="1" max={totalPages} value={startPage} disabled={isProcessing} onFocus={(e) => setPdfViewerCursor(Number(e.target.value))} onChange={(e) => (setStartPage(Number(e.target.value)), setPdfViewerCursor(Number(e.target.value)))} />
-                </Field.Root>
-                <Field.Root>
-                  <Field.Label>
-                    صفحة النهاية
-                  </Field.Label>
-                  <Input type="number" min="1" max={totalPages} value={endPage} disabled={isProcessing} onBlur={e => setPdfViewerCursor(Number(startPage))} onFocus={(e) => setPdfViewerCursor(Number(e.target.value))} onChange={(e) => (setEndPage(Number(e.target.value)), setPdfViewerCursor(Number(e.target.value)))} />
-                </Field.Root>
-              </HStack>
-          }
-            <RadioCard.Root value={selectedMode} width="100%">
-              <HStack align="stretch">
-                {modes.map((mode) => (
-                  <RadioCard.Item key={mode.value} value={mode.value} flex="1" cursor={"pointer"}>
-                    <RadioCard.ItemHiddenInput />
-                    <RadioCard.ItemControl onClick={() => setSelectedMode(mode.value)}>
-                      <RadioCard.ItemText textAlign={"center"}>{mode.title}</RadioCard.ItemText>
-                    </RadioCard.ItemControl>
-                  </RadioCard.Item>
-                ))}
-              </HStack>
-            </RadioCard.Root>
-        </VStack>
-        <VStack gap={5} width={'80%'}> 
-          <Box height={'100%'} width={'100%'} p={10} border={"2px dashed"} borderColor={"gray.800"} borderRadius={5}>
-          { progressDetails !== null && <Table.ScrollArea height={'100%'} width={'100%'} p={0}>
-            <Table.Root striped dir="rtl" stickyHeader>
-              { selectedMode === SESSION_MODES.NAMES && <Table.Header>
-                <Table.Row>
-                  <Table.ColumnHeader>رقم الصفحة</Table.ColumnHeader>
-                  <Table.ColumnHeader>رقم النص</Table.ColumnHeader>
-                  <Table.ColumnHeader>الإسم بالعربي</Table.ColumnHeader>
-                  <Table.ColumnHeader>الإسم باللغة الأجنبية</Table.ColumnHeader>
-                  <Table.ColumnHeader>الرابط الأول</Table.ColumnHeader>
-                  <Table.ColumnHeader>الرابط الثاني</Table.ColumnHeader>
-                  <Table.ColumnHeader>الرابط الثالث</Table.ColumnHeader>
-                </Table.Row>
-              </Table.Header> }
-              { selectedMode === SESSION_MODES.LINES && <Table.Header>
-                <Table.Row>
-                  <Table.ColumnHeader>رقم الصفحة</Table.ColumnHeader>
-                  <Table.ColumnHeader>رقم النص</Table.ColumnHeader>
-                  <Table.ColumnHeader>الشخصية</Table.ColumnHeader>
-                  <Table.ColumnHeader>النص</Table.ColumnHeader>
-                  <Table.ColumnHeader>النبرة</Table.ColumnHeader>
-                  <Table.ColumnHeader>المكان</Table.ColumnHeader>
-                  <Table.ColumnHeader>الخلفية الصوتية</Table.ColumnHeader>
-                </Table.Row>
-              </Table.Header> }
-              {selectedMode === SESSION_MODES.NAMES && <Table.Body>
-                {(progressDetails as ForeignNameRow[]).map((row, index) => (
-                  <Table.Row key={index}>
-                    <Table.Cell minWidth={"2vw"} whiteSpace={"wrap"}>{row['رقم الصفحة']}</Table.Cell>
-                    <Table.Cell minWidth={"2vw"} whiteSpace={"wrap"}>{row['رقم النص']}</Table.Cell>
-                    <Table.Cell minWidth={"2vw"} whiteSpace={"wrap"}>{row['الإسم بالعربي']}</Table.Cell>
-                    <Table.Cell minWidth={"2vw"} whiteSpace={"wrap"}>{row['الإسم باللغة الأجنبية']}</Table.Cell>
-                    <Table.Cell minWidth={"2vw"} whiteSpace={"wrap"}>{row['الرابط الأول']}</Table.Cell>
-                    <Table.Cell minWidth={"2vw"} whiteSpace={"wrap"}>{row['الرابط الثاني']}</Table.Cell>
-                    <Table.Cell minWidth={"2vw"} whiteSpace={"wrap"}>{row['الرابط الثالث']}</Table.Cell>
-                  </Table.Row>
-                ))}
-              </Table.Body>}
-              {selectedMode === SESSION_MODES.LINES && <Table.Body>
-                {(progressDetails as LineRow[]).map((row: LineRow, index) => (
-                  <Table.Row key={index}>
-                    <Table.Cell minWidth={"2vw"} whiteSpace={"wrap"}>{row['رقم الصفحة']}</Table.Cell>
-                    <Table.Cell minWidth={"2vw"} whiteSpace={"wrap"}>{row['رقم النص']}</Table.Cell>
-                    <Table.Cell minWidth={"2vw"} whiteSpace={"wrap"}>{row['الشخصية']}</Table.Cell>
-                    <Table.Cell minWidth={"20vw"} whiteSpace={"wrap"}>{row['النص']}</Table.Cell>
-                    <Table.Cell minWidth={"10vw"} whiteSpace={"wrap"}>{row['النبرة']}</Table.Cell>
-                    <Table.Cell minWidth={"5vw"} whiteSpace={"wrap"}>{row['المكان']}</Table.Cell>
-                    <Table.Cell minWidth={"7vw"} whiteSpace={"wrap"}>{row['الخلفية الصوتية']}</Table.Cell>
-                  </Table.Row>
-                ))}
-              </Table.Body>}
-            </Table.Root> 
-          </Table.ScrollArea> }
-          </Box>
-          { totalPages > 0 && 
-            <HStack gap={5} width={'100%'} height={'3em'} justifyContent={'space-between'}>
-              <VStack alignItems={'flex-start'} >
-                <Progress.Root width="md" max={100} value={currentProgress}>
-                  <HStack gap="5">
-                    <Progress.Track flex="1">
-                      <Progress.Range />
-                    </Progress.Track>
-                    <Progress.ValueText>{currentProgress}%</Progress.ValueText>
-                  </HStack>
-                </Progress.Root>
-                <HStack fontSize={'sm'} color="gray.500">
-                  {progressLabel && <Spinner size={'sm'}/>}
-                  {progressLabel}
-                </HStack>
-              </VStack>
-              <HStack dir="rtl" gap={5}>
-                <Button variant="surface" onClick={handleDownload}>
-                  <span>تنزيل الجدول</span>
+      <VStack width={'100%'} height={'100%'} gap={10} alignItems={'stretch'}>
+        <HStack height={'100%'} width={'100%'} gap={10} alignItems={'stretch'}>
+          <VStack gap={5} width={'20%'} height={'100%'} justifyContent={'space-between'}>
+            {file == null && <FileUpload.Root
+              accept={["application/pdf"]}
+              alignItems="stretch"
+              flexGrow={1}
+              maxFiles={10}
+              onChange={handleFileChange}
+              width={'20vw'}
+              height={'65vh'}
+            >
+              <FileUpload.HiddenInput />
+              <FileUpload.Dropzone flexGrow={1}>
+                {isUploading && <Spinner />}
+                {!isUploading && <>
                   <Icon size="md" color="fg.muted">
-                    <LuDownload />
+                    <LuUpload />
                   </Icon>
-                </Button>
-                <Timer running={isProcessing}></Timer>
+                  <FileUpload.DropzoneContent>
+                    <Box>Drag and drop pdf here</Box>
+                  </FileUpload.DropzoneContent>
+                </>}
+              </FileUpload.Dropzone>
+            </FileUpload.Root> }
+            {file != null && <PDFViewer engine={pdfJs} file={file} cursor={pdfViewerCursor}></PDFViewer>}
+            { file != null && <Button onClick={handleConvert} loading={isUploading} variant="surface" width={'100%'}>
+              فرغ النص
+            </Button> }
+            { totalPages > 0 &&
+              <HStack dir="rtl" gap={5} width={'20vw'} justifyContent={'space-between'}>
+                  <Field.Root>
+                    <Field.Label>
+                      صفحة البداية
+                    </Field.Label>
+                    <Input type="number" min="1" max={totalPages} value={startPage} disabled={isProcessing} onFocus={(e) => setPdfViewerCursor(Number(e.target.value))} onChange={(e) => (setStartPage(Number(e.target.value)), setPdfViewerCursor(Number(e.target.value)))} />
+                  </Field.Root>
+                  <Field.Root>
+                    <Field.Label>
+                      صفحة النهاية
+                    </Field.Label>
+                    <Input type="number" min="1" max={totalPages} value={endPage} disabled={isProcessing} onBlur={e => setPdfViewerCursor(Number(startPage))} onFocus={(e) => setPdfViewerCursor(Number(e.target.value))} onChange={(e) => (setEndPage(Number(e.target.value)), setPdfViewerCursor(Number(e.target.value)))} />
+                  </Field.Root>
+                </HStack>
+            }
+              <RadioCard.Root value={selectedMode} width="100%">
+                <HStack align="stretch">
+                  {modes.map((mode) => (
+                    <RadioCard.Item key={mode.value} value={mode.value} flex="1" cursor={"pointer"}>
+                      <RadioCard.ItemHiddenInput />
+                      <RadioCard.ItemControl onClick={() => setSelectedMode(mode.value)}>
+                        <RadioCard.ItemText textAlign={"center"}>{mode.title}</RadioCard.ItemText>
+                      </RadioCard.ItemControl>
+                    </RadioCard.Item>
+                  ))}
+                </HStack>
+              </RadioCard.Root>
+          </VStack>
+          <VStack gap={5} width={'80%'}> 
+            <Box height={'100%'} width={'100%'} p={10} border={"2px dashed"} borderColor={"gray.800"} borderRadius={5}>
+            { progressDetails !== null && <Table.ScrollArea height={'100%'} width={'100%'} p={0}>
+              <Table.Root striped dir="rtl" stickyHeader>
+                { selectedMode === SESSION_MODES.NAMES && <Table.Header>
+                  <Table.Row>
+                    <Table.ColumnHeader>رقم الصفحة</Table.ColumnHeader>
+                    <Table.ColumnHeader>رقم النص</Table.ColumnHeader>
+                    <Table.ColumnHeader>الإسم بالعربي</Table.ColumnHeader>
+                    <Table.ColumnHeader>الإسم باللغة الأجنبية</Table.ColumnHeader>
+                    <Table.ColumnHeader>الرابط الأول</Table.ColumnHeader>
+                    <Table.ColumnHeader>الرابط الثاني</Table.ColumnHeader>
+                    <Table.ColumnHeader>الرابط الثالث</Table.ColumnHeader>
+                  </Table.Row>
+                </Table.Header> }
+                { selectedMode === SESSION_MODES.LINES && <Table.Header>
+                  <Table.Row>
+                    <Table.ColumnHeader>رقم الصفحة</Table.ColumnHeader>
+                    <Table.ColumnHeader>رقم النص</Table.ColumnHeader>
+                    <Table.ColumnHeader>الشخصية</Table.ColumnHeader>
+                    <Table.ColumnHeader>النص</Table.ColumnHeader>
+                    <Table.ColumnHeader>النبرة</Table.ColumnHeader>
+                    <Table.ColumnHeader>المكان</Table.ColumnHeader>
+                    <Table.ColumnHeader>الخلفية الصوتية</Table.ColumnHeader>
+                  </Table.Row>
+                </Table.Header> }
+                {selectedMode === SESSION_MODES.NAMES && <Table.Body>
+                  {(progressDetails as ForeignNameRow[]).map((row, index) => (
+                    <Table.Row key={index}>
+                      <Table.Cell minWidth={"2vw"} whiteSpace={"wrap"}>{row['رقم الصفحة']}</Table.Cell>
+                      <Table.Cell minWidth={"2vw"} whiteSpace={"wrap"}>{row['رقم النص']}</Table.Cell>
+                      <Table.Cell minWidth={"2vw"} whiteSpace={"wrap"}>{row['الإسم بالعربي']}</Table.Cell>
+                      <Table.Cell minWidth={"2vw"} whiteSpace={"wrap"}>{row['الإسم باللغة الأجنبية']}</Table.Cell>
+                      <Table.Cell minWidth={"2vw"} whiteSpace={"wrap"}>{row['الرابط الأول']}</Table.Cell>
+                      <Table.Cell minWidth={"2vw"} whiteSpace={"wrap"}>{row['الرابط الثاني']}</Table.Cell>
+                      <Table.Cell minWidth={"2vw"} whiteSpace={"wrap"}>{row['الرابط الثالث']}</Table.Cell>
+                    </Table.Row>
+                  ))}
+                </Table.Body>}
+                {selectedMode === SESSION_MODES.LINES && <Table.Body>
+                  {(progressDetails as LineRow[]).map((row: LineRow, index) => (
+                    <Table.Row key={index}>
+                      <Table.Cell minWidth={"2vw"} whiteSpace={"wrap"}>{row['رقم الصفحة']}</Table.Cell>
+                      <Table.Cell minWidth={"2vw"} whiteSpace={"wrap"}>{row['رقم النص']}</Table.Cell>
+                      <Table.Cell minWidth={"2vw"} whiteSpace={"wrap"}>{row['الشخصية']}</Table.Cell>
+                      <Table.Cell minWidth={"20vw"} whiteSpace={"wrap"}>{row['النص']}</Table.Cell>
+                      <Table.Cell minWidth={"10vw"} whiteSpace={"wrap"}>{row['النبرة']}</Table.Cell>
+                      <Table.Cell minWidth={"5vw"} whiteSpace={"wrap"}>{row['المكان']}</Table.Cell>
+                      <Table.Cell minWidth={"7vw"} whiteSpace={"wrap"}>{row['الخلفية الصوتية']}</Table.Cell>
+                    </Table.Row>
+                  ))}
+                </Table.Body>}
+              </Table.Root> 
+            </Table.ScrollArea> }
+            </Box>
+            { totalPages > 0 && 
+              <HStack gap={5} width={'100%'} height={'3em'} justifyContent={'space-between'}>
+                <VStack alignItems={'flex-start'} >
+                  <Progress.Root width="md" max={100} value={currentProgress}>
+                    <HStack gap="5">
+                      <Progress.Track flex="1">
+                        <Progress.Range />
+                      </Progress.Track>
+                      <Progress.ValueText>{currentProgress}%</Progress.ValueText>
+                    </HStack>
+                  </Progress.Root>
+                  <HStack fontSize={'sm'} color="gray.500">
+                    {progressLabel && <Spinner size={'sm'}/>}
+                    {progressLabel}
+                  </HStack>
+                </VStack>
+                <HStack dir="rtl" gap={5}>
+                  <Button variant="surface" onClick={handleDownload}>
+                    <span>تنزيل الجدول</span>
+                    <Icon size="md" color="fg.muted">
+                      <LuDownload />
+                    </Icon>
+                  </Button>
+                  <Timer running={isProcessing}></Timer>
+                </HStack>
               </HStack>
-            </HStack>
-          }
-        </VStack>
-      </HStack>
+            }
+          </VStack>
+        </HStack>
+        <Badge as="div" style={{ width: "min-content" }} size="lg"> رقم الإصدار : { process.env.version }</Badge>
+      </VStack>
     </Container>
   );
 }
