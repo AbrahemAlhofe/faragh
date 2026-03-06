@@ -11,6 +11,7 @@ import {
   Field,
   Spinner,
   Table,
+  Text,
   RadioCard,
   Badge
 } from '@chakra-ui/react';
@@ -148,27 +149,57 @@ export default function Home() {
     }
 
     setIsUploading(true);
+
     try {
-
-      if (!file) {
-        throw new Error('PDF not loaded');
-      }
-
       setIsProcessing(true);
 
       const formData = new FormData();
       formData.append('file', file);
-      const request = await fetch(`/api/sessions/${sessionId}?startPage=${startPage}&endPage=${endPage}&mode=${selectedMode}`, { method: 'POST', body: formData });
-      const response = await request.json();
+      
+      const request = await fetch(
+        `/api/sessions/${sessionId}?startPage=${startPage}&endPage=${endPage}&mode=${selectedMode}`,
+        { 
+          method: 'POST',
+          body: formData
+        }
+      );
 
+      // Try to parse response
+      let response;
+      try {
+        response = await request.json();
+      } catch {
+        toaster.create({
+          title: 'استجابة غير صحيحة',
+          description: 'الخادم أرسل بيانات غير صحيحة',
+          type: 'error',
+          duration: 5000
+        });
+        return;
+      }
+
+      // Check if request was successful
       if (request.ok) {
-        
         setSheetUrl(response.sheetUrl);
-
         setIsDone(true);
-
+        toaster.create({
+          title: 'تم تفريغ الكتاب بنجاح',
+          type: 'success',
+          duration: 3000
+        });
       } else {
+        // Check for server errors (5xx)
+        if (request.status >= 500) {
+          toaster.create({
+            title: 'خطأ في الخادم',
+            description: 'تأكد من اتصالك بالانترنت أو اعد المحاولة لاحفا',
+            type: 'error',
+            duration: 5000
+          });
+          return;
+        }
 
+        // Check for specific error types
         const { type } = response;
 
         if (type === 'EXCEEDED_QUOTA') {
@@ -178,23 +209,48 @@ export default function Home() {
             type: 'error',
             duration: 3000
           });
+        } else if (type === 'GEMINI_INVALID_INPUT') {
+          toaster.create({
+            title: 'لا يمكن معالجة هذا الكتاب',
+            description: 'الملف يحتوي على صور لا يمكن قراءتها',
+            type: 'error',
+            duration: 10000
+          });
+        } else {
+          toaster.create({
+            title: 'خطأ أثناء التفريغ',
+            description: response.details || 'حدث خطأ غير متوقع',
+            type: 'error',
+            duration: 5000
+          });
         }
-
-      }      
+      }
 
     } catch (error: unknown) {
       if (error instanceof Error) {
-        toaster.create({
-          title: 'حدث خطأ أثناء إستخراج النص',
-          description: error.message,
-          type: 'error',
-          duration: 3000,
-        });
+        // Network error
+        if (error.message.includes('fetch') || error.message.includes('Network')) {
+          toaster.create({
+            title: 'فقدان الاتصال',
+            description: 'تحقق من اتصالك بالإنترنت',
+            type: 'error',
+            duration: 5000
+          });
+        }
+        // Other errors
+        else {
+          toaster.create({
+            title: 'حدث خطأ',
+            description: error.message,
+            type: 'error',
+            duration: 3000
+          });
+        }
       }
     } finally {
       setIsUploading(false);
       setIsProcessing(false);
-      setProgressLabel(null)
+      setProgressLabel(null);
     }
   };
 
@@ -214,6 +270,30 @@ export default function Home() {
     link.click();
   };
 
+
+  const handleReset = async () => {
+
+    if(sessionId) {
+      await fetch(`/api/sessions/${sessionId}`, {method: 'DELETE'})
+      console.log('Start a new session')
+    }
+
+    setFile(null);
+    setSessionId(null);
+    setIsProcessing(false);
+    setIsUploading(false);
+    setIsDone(false);
+    setSheetUrl(null);
+    setProgress(0);
+    setProgressLabel(null);
+    setProgressDetails(null);
+    setTotalPages(0);
+    setStartPage(1);
+    setEndPage(0);
+    setPdfViewerCursor(1);
+    
+};
+
   return (
     <Container fluid py={10} height={'100vh'} width={'100vw'} centerContent={true}>
       <script src="/pdfjs-5.4.530-dist/build/pdf.mjs" type="module" async />
@@ -232,21 +312,27 @@ export default function Home() {
             >
               <FileUpload.HiddenInput />
               <FileUpload.Dropzone flexGrow={1}>
-                {isUploading && <Spinner />}
+                {isUploading && <VStack>
+                  <Spinner></Spinner>
+                  <Text>جاري رفع الكتاب ...</Text>
+                  </VStack>}
                 {!isUploading && <>
                   <Icon size="md" color="fg.muted">
                     <LuUpload />
                   </Icon>
                   <FileUpload.DropzoneContent>
-                    <Box>Drag and drop pdf here</Box>
+                    <Box>قم برفع الملف هنا</Box>
                   </FileUpload.DropzoneContent>
                 </>}
               </FileUpload.Dropzone>
             </FileUpload.Root> }
             {file != null && <PDFViewer engine={pdfJs} file={file} cursor={pdfViewerCursor}></PDFViewer>}
-            { file != null && <Button onClick={handleConvert} loading={isUploading} variant="surface" width={'100%'}>
+            { file != null && <Button  colorPalette={'blue'} onClick={handleConvert} loading={isUploading} variant="surface" width={'100%'}>
               فرغ النص
             </Button> }
+            { file != null && !isProcessing && <Button  colorPalette={'gray'} onClick={handleReset} loading={isUploading} variant="outline" width={'100%'}>
+              رفع كتاب آخر            
+              </Button> }
             { totalPages > 0 &&
               <HStack dir="rtl" gap={5} width={'20vw'} justifyContent={'space-between'}>
                   <Field.Root>

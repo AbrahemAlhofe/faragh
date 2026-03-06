@@ -155,9 +155,13 @@ export function convertToXLSX(data: any[]): Uint8Array {
         return await callback();
       } catch (error) {
         console.warn(`[ ERROR ] try again ${3 - attempt} times more : `, error);
-        if (attempt === 3) {
-          throw error; // or throw error
-        }
+
+         const message = error instanceof Error ? error.message : String(error);
+        if (message.includes("INVALID_ARGUMENT") || message.includes("Unable to process input image")) {
+        throw Object.assign(new Error("GEMINI_INVALID_INPUT"), { type: "GEMINI_INVALID_INPUT" });
+      }
+        if(attempt === 3)
+          throw error;
         await sleep(delay * attempt);
       }
     }

@@ -146,7 +146,11 @@ export async function POST(
   
     return NextResponse.json({ sheetUrl }, { status: 200 });
 
-  } catch (error: unknown) {
+  } catch (error: any) {
+
+    if (error.type === "GEMINI_INVALID_INPUT") {
+      return NextResponse.json({ type: "GEMINI_INVALID_INPUT" }, { status: 400 });
+    }
 
     await getRedis().set(
       `${sessionId}/sheet`,
@@ -229,4 +233,21 @@ export async function GET(
       )}"`,
     },
   });
+}
+
+export async function DELETE(
+  req: NextRequest,
+  { params }: { params: Promise<{ sessionId: string }> }
+) {
+
+  const { sessionId } = await params;
+
+  if (!sessionId) {
+    return NextResponse.json({ error: "No sessionId provided" }, { status: 400 });
+  }
+
+  await getRedis().del(`${sessionId}/progress`);
+  await getRedis().del(`${sessionId}/sheet`);
+
+  return NextResponse.json({ success: true }, { status: 200 });
 }
