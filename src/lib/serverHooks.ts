@@ -33,6 +33,8 @@ export async function useScanner(
         density: 72 * scale,
         width: 600 * scale,
         height: 800 * scale,
+        format: "jpeg",
+        quality: 80,
       });
 
       const imageBuffer = await scanner(pageNumber, { responseType: 'buffer' });
@@ -43,7 +45,13 @@ export async function useScanner(
       }
 
       const base64 = Buffer.from(buffer).toString('base64');
+
       imagesCache[pageNumber] = base64;
+
+      console.log({
+        size: imageBuffer.size,
+        mime: "image/png",
+        });
 
       return base64;
     },
@@ -63,7 +71,7 @@ export async function useSheeter({ readingMemoryLimit }: { readingMemoryLimit: n
         {
           inlineData: {
             data: image,
-            mimeType: 'image/png',
+            mimeType: 'image/jpeg',
           }
         }
       ],

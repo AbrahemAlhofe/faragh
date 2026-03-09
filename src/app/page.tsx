@@ -192,7 +192,7 @@ export default function Home() {
         if (request.status >= 500) {
           toaster.create({
             title: 'خطأ في الخادم',
-            description: 'تأكد من اتصالك بالانترنت أو اعد المحاولة لاحفا',
+            description: 'تأكد من اتصالك بالانترنت أو اعد المحاولة لاحقا',
             type: 'error',
             duration: 5000
           });
@@ -212,9 +212,9 @@ export default function Home() {
         } else if (type === 'GEMINI_INVALID_INPUT') {
           toaster.create({
             title: 'لا يمكن معالجة هذا الكتاب',
-            description: 'الملف يحتوي على صور لا يمكن قراءتها',
+            description: 'استخدم هذا الموقع لحل المشكلة: https://www.ilovepdf.com/repair-pdf',
             type: 'error',
-            duration: 10000
+            duration: 20000
           });
         } else {
           toaster.create({
