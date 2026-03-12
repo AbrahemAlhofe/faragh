@@ -33,9 +33,15 @@ export async function useScanner(
         density: 72 * scale,
         width: 600 * scale,
         height: 800 * scale,
+        format: 'png',
       });
 
+      
       const imageBuffer = await scanner(pageNumber, { responseType: 'buffer' });
+      
+      if (!imageBuffer?.buffer || !Buffer.isBuffer(imageBuffer.buffer) || imageBuffer.buffer.length === 0) {
+        throw new Error(`Invalid rendered buffer for page ${pageNumber}`);
+      }
 
       const buffer = imageBuffer?.buffer;
       if (!buffer) {
