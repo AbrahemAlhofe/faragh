@@ -49,7 +49,13 @@ export async function useScanner(
       }
 
       const base64 = Buffer.from(buffer).toString('base64');
+
       imagesCache[pageNumber] = base64;
+
+      console.log({
+        size: imageBuffer.size,
+        mime: "image/png",
+        });
 
       return base64;
     },
@@ -69,7 +75,7 @@ export async function useSheeter({ readingMemoryLimit }: { readingMemoryLimit: n
         {
           inlineData: {
             data: image,
-            mimeType: 'image/png',
+            mimeType: 'image/jpeg',
           }
         }
       ],
