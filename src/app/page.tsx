@@ -22,6 +22,7 @@ import Timer from '@/components/ui/timer';
 import { ForeignNameRow, LineRow, PDFJs, SESSION_MODES, SESSION_STAGES } from '@/lib/types';
 import { filterSimilarEnglishNames } from '@/lib/utils';
 import PDFViewer from '@/components/ui/pdf-viewer';
+import nextJsVersion from 'next/package.json';
 
 export default function Home() {
   const [file, setFile] = useState<File | null>(null);
@@ -51,6 +52,7 @@ export default function Home() {
       const pdfjs = window.pdfjsLib as PDFJs;
       window.pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdfjs-5.4.530-dist/build/pdf.worker.mjs';
       console.info("PDF.js loaded:", pdfjs.version);
+      console.info("Next.js version:", nextJsVersion.version);
       setPdfJs(pdfjs);
     })()
 
@@ -267,8 +269,15 @@ export default function Home() {
     
     const link = document.createElement('a');
     link.href = sheetUrl;
-    link.download = file?.name.replace('.pdf', '.csv') || 'sheet.csv';
+    link.download = file?.name.replace('.pdf', '.xlsx') || 'sheet.xlsx';
     link.click();
+
+    toaster.create({
+      title: 'تم بدء التنزيل',
+      description: 'متصفحك لا يدعم نافذة الحفظ المباشرة، فتم استخدام التنزيل العادي',
+      type: 'info',
+      duration: 4000,
+    });
   };
 
 
@@ -363,7 +372,7 @@ export default function Home() {
                 </HStack>
               </RadioCard.Root>
           </VStack>
-          <VStack gap={5} width={'80%'}> 
+          <VStack gap={5} flex={1}> 
             <Box height={'100%'} width={'100%'} p={10} border={"2px dashed"} borderColor={"gray.800"} borderRadius={5}>
             { progressDetails !== null && <Table.ScrollArea height={'100%'} width={'100%'} p={0}>
               <Table.Root striped dir="rtl" stickyHeader>
