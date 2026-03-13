@@ -23,6 +23,7 @@ import { ForeignNameRow, LineRow, PDFJs, SESSION_MODES, SESSION_STAGES } from '@
 import { filterSimilarEnglishNames } from '@/lib/utils';
 import PDFViewer from '@/components/ui/pdf-viewer';
 import nextJsVersion from 'next/package.json';
+import Script from 'next/script';
 
 export default function Home() {
   const [file, setFile] = useState<File | null>(null);
@@ -47,16 +48,9 @@ export default function Home() {
   ]
 
   useEffect(() => {
-
-    (async () => {
-      const pdfjs = window.pdfjsLib as PDFJs;
-      window.pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdfjs-5.4.530-dist/build/pdf.worker.mjs';
-      console.info("PDF.js loaded:", pdfjs.version);
-      console.info("Next.js version:", nextJsVersion.version);
-      setPdfJs(pdfjs);
-    })()
-
-  }, []);
+    console.info("PDF.js loaded:", pdfJs?.version);
+    console.info("Next.js version:", nextJsVersion.version);
+  }, [pdfJs]);
 
   useEffect(() => {
     if (!sessionId) return;
@@ -306,7 +300,16 @@ export default function Home() {
 
   return (
     <Container fluid py={10} height={'100vh'} width={'100vw'} centerContent={true}>
-      <script src="/pdfjs-5.4.530-dist/build/pdf.mjs" type="module" async />
+      <Script
+        src="/pdfjs-5.4.530-dist/build/pdf.mjs"
+        type="module"
+        async
+        onLoad={() => {
+          const pdfjs = (window as any).pdfjsLib;
+          pdfjs.GlobalWorkerOptions.workerSrc = "/pdfjs-5.4.530-dist/build/pdf.worker.mjs";
+          setPdfJs(pdfjs);
+        }}
+      />
       <Toaster />
       <VStack width={'100%'} height={'100%'} gap={10} alignItems={'stretch'}>
         <HStack height={'100%'} width={'100%'} gap={10} alignItems={'stretch'}>
