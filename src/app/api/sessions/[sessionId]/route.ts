@@ -4,11 +4,15 @@ import { useForeignNamesExtractor, useScanner, useSheeter } from "@/lib/serverHo
 import { convertToXLSX, filterSimilarEnglishNames, normalizeEnglishName, parallelReading } from "@/lib/utils";
 import { getRedis } from "@/lib/redis";
 
-async function validateLink(url: string): Promise<string> {
+async function validateLink(url: string, signal?: AbortSignal): Promise<string> {
   try {
-    const response = await fetch(url, { method: "HEAD" });
+    const response = await fetch(url, { method: "HEAD", signal });
     return response.ok ? url : "Not Found";
-  } catch {
+  } catch (error: any) {
+    // Return "Not Found" for abort errors as well
+    if (error.name === "AbortError") {
+      throw error; // Re-throw abort errors to propagate up
+    }
     return "Not Found";
   }
 }
@@ -18,6 +22,13 @@ export async function POST(
   { params }: { params: Promise<{ sessionId: string }> }
 ) {
 
+  const signal = req.signal;
+  
+  // Check if already aborted
+  if (signal.aborted) {
+    return new NextResponse("Client connection aborted", { status: 499 });
+  }
+
   const { sessionId } = await params;
   const formData = await req.formData();
   const file = formData.get("file") as File;
@@ -26,6 +37,8 @@ export async function POST(
   if (!file) return NextResponse.json({ error: "No file uploaded" }, { status: 400 });
 
   try {
+    // Check abort signal before starting processing
+    signal.throwIfAborted();
 
     const startPage = parseInt(
       req.nextUrl.searchParams.get("startPage") || "1",
@@ -58,6 +71,7 @@ export async function POST(
     const [images, numberOfPages, scan] = await useScanner(file);
     const scannedPages = [];
     await parallelReading(numberOfPages, async (pageNum: number) => {
+      signal.throwIfAborted(); // Check before scanning each page
       if ( pageNum < startPage || pageNum > endPage ) return;
       await scan(pageNum);
       scannedPages.push(pageNum);
@@ -74,13 +88,14 @@ export async function POST(
       const seenNames = new Set<string>(); // Track normalized names we've already added
       
       for (let i = startPage; i <= endPage; i++) {
+        signal.throwIfAborted(); // Check before processing each page
         const image = images(i) as string;
         const lines = await extract(i, image);
         const validateLines = await Promise.all(
           lines.map( async line => {
-            if(line["الرابط الأول"]) line["الرابط الأول"] = await validateLink(line["الرابط الأول"]);
-            if(line["الرابط الثاني"]) line["الرابط الثاني"] = await validateLink(line["الرابط الثاني"]);
-            if(line["الرابط الثالث"]) line["الرابط الثالث"] = await validateLink(line["الرابط الثالث"]);
+            if(line["الرابط الأول"]) line["الرابط الأول"] = await validateLink(line["الرابط الأول"], signal);
+            if(line["الرابط الثاني"]) line["الرابط الثاني"] = await validateLink(line["الرابط الثاني"], signal);
+            if(line["الرابط الثالث"]) line["الرابط الثالث"] = await validateLink(line["الرابط الثالث"], signal);
             return line;
           })
         )
@@ -122,6 +137,7 @@ export async function POST(
       const [_sheet, extract] = await useSheeter({ readingMemoryLimit: 15 });
       sheetFile =  { pdfFilename: file.name, sheet: _sheet };
       for (let i = startPage; i <= endPage; i++) {
+        signal.throwIfAborted(); // Check before processing each page
         const image = images(i) as string;
         const lines = await extract(i, image);
         await getRedis().set(`${sessionId}/progress`, JSON.stringify({ stage: "EXTRACTING", cursor: i, progress: Math.round(((i - startPage + 1) / totalPages) * 100), details: JSON.stringify(lines) }));
@@ -146,6 +162,11 @@ export async function POST(
     return NextResponse.json({ sheetUrl }, { status: 200 });
 
   } catch (error: any) {
+    // Handle client abort
+    if (error.name === "AbortError") {
+      console.log(`[POST] Client connection aborted for sessionId: ${sessionId}`);
+      return new NextResponse("Client connection aborted", { status: 499 });
+    }
 
     if (error.type === "GEMINI_INVALID_INPUT") {
       return NextResponse.json({ type: "GEMINI_INVALID_INPUT" }, { status: 400 });
