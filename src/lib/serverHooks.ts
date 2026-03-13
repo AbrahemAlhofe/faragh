@@ -7,7 +7,6 @@ import { Type } from "@google/genai";
 import { callAI, handleConversation } from "./ai";
 import { fromBuffer } from 'pdf2pic';
 import countPages from 'page-count';
-import { inherits } from 'util';
 
 export async function useScanner(
   pdf: File,

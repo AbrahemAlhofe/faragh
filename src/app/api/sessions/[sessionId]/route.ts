@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import countPages from "page-count";
 import { ForeignNameRow, LineRow, SESSION_MODES, SESSION_STAGES, SessionProgress, SheetFile } from "@/lib/types";
 import { useForeignNamesExtractor, useScanner, useSheeter } from "@/lib/serverHooks";
 import { convertToXLSX, filterSimilarEnglishNames, normalizeEnglishName, parallelReading } from "@/lib/utils";
