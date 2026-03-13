@@ -25,6 +25,8 @@ import PDFViewer from '@/components/ui/pdf-viewer';
 import nextJsVersion from 'next/package.json';
 import Script from 'next/script';
 
+export const dynamic = "force-dynamic";
+
 export default function Home() {
   const [file, setFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
