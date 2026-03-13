@@ -50,6 +50,7 @@ export default function Home() {
     (async () => {
       const pdfjs = window.pdfjsLib as PDFJs;
       window.pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdfjs-5.4.530-dist/build/pdf.worker.mjs';
+      console.info("PDF.js loaded:", pdfjs.version);
       setPdfJs(pdfjs);
     })()
 
