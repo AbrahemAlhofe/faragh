@@ -51,6 +51,7 @@ export default function Home() {
     console.info("PDF.js loaded:", pdfJs?.version);
     console.info("Next.js version:", nextJsVersion.version);
   }, [pdfJs]);
+  console.info("Build time:", process.env.buildTime);
 
   useEffect(() => {
     if (!sessionId) return;
