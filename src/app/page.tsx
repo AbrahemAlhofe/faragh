@@ -278,12 +278,12 @@ export default function Home() {
   };
 
 
-  const handleReset = async () => {
+  const handleReset = () => {
 
-    if(sessionId) {
-      await fetch(`/api/sessions/${sessionId}`, {method: 'DELETE'})
-      console.log('Start a new session')
-    }
+    // if(sessionId) {
+    //   await fetch(`/api/sessions/${sessionId}`, {method: 'DELETE'})
+    //   console.log('Start a new session')
+    // }
 
     setFile(null);
     setSessionId(null);
@@ -302,7 +302,7 @@ export default function Home() {
 };
 
   return (
-    <Container fluid py={10} height={'100vh'} width={'100vw'} centerContent={true}>
+    <Container fluid py={{ base: 4, md: 10 }} px={{ base: 4, md: 6 }} minH={'100vh'} width={'100%'} centerContent={true}>
       <Script
         src="/pdfjs-5.4.530-dist/build/pdf.mjs"
         type="module"
@@ -314,17 +314,28 @@ export default function Home() {
         }}
       />
       <Toaster />
-      <VStack width={'100%'} height={'100%'} gap={10} alignItems={'stretch'}>
-        <HStack height={'100%'} width={'100%'} gap={10} alignItems={'stretch'}>
-          <VStack gap={5} width={'20%'} height={'100%'} justifyContent={'space-between'}>
+      <VStack width={'100%'} gap={{ base: 6, md: 10 }} alignItems={'stretch'}>
+        <HStack 
+          width={'100%'} 
+          gap={{ base: 4, md: 10 }} 
+          alignItems={'stretch'}
+          flexDirection={{ base: 'column', lg: 'row' }}
+          minH={{ base: 'auto', lg: '90vh' }}
+        >
+          <VStack 
+            gap={5} 
+            width={{ base: '100%', lg: '20%' }} 
+            minH={{ base: 'auto', lg: '100%' }} 
+            justifyContent={'space-between'}
+          >
             {file == null && <FileUpload.Root
               accept={["application/pdf"]}
               alignItems="stretch"
               flexGrow={1}
               maxFiles={10}
               onChange={handleFileChange}
-              width={'20vw'}
-              height={'65vh'}
+              width={'100%'}
+              height={{ base: '40vh', md: '50vh', lg: '65vh' }}
             >
               <FileUpload.HiddenInput />
               <FileUpload.Dropzone flexGrow={1}>
@@ -349,15 +360,21 @@ export default function Home() {
             { file != null && !isProcessing && <Button  colorPalette={'gray'} onClick={handleReset} loading={isUploading} variant="outline" width={'100%'}>
               رفع كتاب آخر            
               </Button> }
-            { totalPages > 0 &&
-              <HStack dir="rtl" gap={5} width={'20vw'} justifyContent={'space-between'}>
-                  <Field.Root>
+            {totalPages > 0 &&
+              <HStack 
+                dir="rtl" 
+                gap={5} 
+                width={'100%'} 
+                justifyContent={'space-between'}
+                flexDirection={{ base: 'column', md: 'row' }}
+              >
+                  <Field.Root flex={1} width={{ base: '100%', md: 'auto' }}>
                     <Field.Label>
                       صفحة البداية
                     </Field.Label>
                     <Input type="number" min="1" max={totalPages} value={startPage} disabled={isProcessing} onFocus={(e) => setPdfViewerCursor(Number(e.target.value))} onChange={(e) => (setStartPage(Number(e.target.value)), setPdfViewerCursor(Number(e.target.value)))} />
                   </Field.Root>
-                  <Field.Root>
+                  <Field.Root flex={1} width={{ base: '100%', md: 'auto' }}>
                     <Field.Label>
                       صفحة النهاية
                     </Field.Label>
@@ -366,7 +383,7 @@ export default function Home() {
                 </HStack>
             }
               <RadioCard.Root value={selectedMode} width="100%">
-                <HStack align="stretch">
+                <HStack align="stretch" flexDirection={{ base: 'column', sm: 'row' }}>
                   {modes.map((mode) => (
                     <RadioCard.Item key={mode.value} value={mode.value} flex="1" cursor={"pointer"}>
                       <RadioCard.ItemHiddenInput />
@@ -378,8 +395,16 @@ export default function Home() {
                 </HStack>
               </RadioCard.Root>
           </VStack>
-          <VStack gap={5} flex={1}> 
-            <Box height={'100%'} width={'100%'} p={10} border={"2px dashed"} borderColor={"gray.800"} borderRadius={5}>
+          <VStack gap={5} flex={1} width={{ base: '100%', lg: 'auto' }}> 
+            <Box 
+              height={{ base: '50vh', md: '60vh', lg: '100%' }} 
+              width={'100%'} 
+              p={{ base: 4, md: 8, lg: 10 }} 
+              border={"2px dashed"} 
+              borderColor={"gray.800"} 
+              borderRadius={5}
+              overflowX={{ base: 'auto', md: 'hidden' }}
+            >
             { progressDetails !== null && <Table.ScrollArea height={'100%'} width={'100%'} p={0}>
               <Table.Root striped dir="rtl" stickyHeader>
                 { selectedMode === SESSION_MODES.NAMES && <Table.Header>
@@ -407,26 +432,26 @@ export default function Home() {
                 {selectedMode === SESSION_MODES.NAMES && <Table.Body>
                   {(progressDetails as ForeignNameRow[]).map((row, index) => (
                     <Table.Row key={index}>
-                      <Table.Cell minWidth={"2vw"} whiteSpace={"wrap"}>{row['رقم الصفحة']}</Table.Cell>
-                      <Table.Cell minWidth={"2vw"} whiteSpace={"wrap"}>{row['رقم النص']}</Table.Cell>
-                      <Table.Cell minWidth={"2vw"} whiteSpace={"wrap"}>{row['الإسم بالعربي']}</Table.Cell>
-                      <Table.Cell minWidth={"2vw"} whiteSpace={"wrap"}>{row['الإسم باللغة الأجنبية']}</Table.Cell>
-                      <Table.Cell minWidth={"2vw"} whiteSpace={"wrap"}>{row['الرابط الأول']}</Table.Cell>
-                      <Table.Cell minWidth={"2vw"} whiteSpace={"wrap"}>{row['الرابط الثاني']}</Table.Cell>
-                      <Table.Cell minWidth={"2vw"} whiteSpace={"wrap"}>{row['الرابط الثالث']}</Table.Cell>
+                      <Table.Cell minWidth={{ base: '6rem', md: '8rem' }} whiteSpace={"wrap"}>{row['رقم الصفحة']}</Table.Cell>
+                      <Table.Cell minWidth={{ base: '6rem', md: '8rem' }} whiteSpace={"wrap"}>{row['رقم النص']}</Table.Cell>
+                      <Table.Cell minWidth={{ base: '8rem', md: '12rem' }} whiteSpace={"wrap"}>{row['الإسم بالعربي']}</Table.Cell>
+                      <Table.Cell minWidth={{ base: '8rem', md: '12rem' }} whiteSpace={"wrap"}>{row['الإسم باللغة الأجنبية']}</Table.Cell>
+                      <Table.Cell minWidth={{ base: '8rem', md: '12rem' }} whiteSpace={"wrap"}>{row['الرابط الأول']}</Table.Cell>
+                      <Table.Cell minWidth={{ base: '8rem', md: '12rem' }} whiteSpace={"wrap"}>{row['الرابط الثاني']}</Table.Cell>
+                      <Table.Cell minWidth={{ base: '8rem', md: '12rem' }} whiteSpace={"wrap"}>{row['الرابط الثالث']}</Table.Cell>
                     </Table.Row>
                   ))}
                 </Table.Body>}
                 {selectedMode === SESSION_MODES.LINES && <Table.Body>
                   {(progressDetails as LineRow[]).map((row: LineRow, index) => (
                     <Table.Row key={index}>
-                      <Table.Cell minWidth={"2vw"} whiteSpace={"wrap"}>{row['رقم الصفحة']}</Table.Cell>
-                      <Table.Cell minWidth={"2vw"} whiteSpace={"wrap"}>{row['رقم النص']}</Table.Cell>
-                      <Table.Cell minWidth={"2vw"} whiteSpace={"wrap"}>{row['الشخصية']}</Table.Cell>
-                      <Table.Cell minWidth={"20vw"} whiteSpace={"wrap"}>{row['النص']}</Table.Cell>
-                      <Table.Cell minWidth={"10vw"} whiteSpace={"wrap"}>{row['النبرة']}</Table.Cell>
-                      <Table.Cell minWidth={"5vw"} whiteSpace={"wrap"}>{row['المكان']}</Table.Cell>
-                      <Table.Cell minWidth={"7vw"} whiteSpace={"wrap"}>{row['الخلفية الصوتية']}</Table.Cell>
+                      <Table.Cell minWidth={{ base: '6rem', md: '8rem' }} whiteSpace={"wrap"}>{row['رقم الصفحة']}</Table.Cell>
+                      <Table.Cell minWidth={{ base: '6rem', md: '8rem' }} whiteSpace={"wrap"}>{row['رقم النص']}</Table.Cell>
+                      <Table.Cell minWidth={{ base: '8rem', md: '12rem' }} whiteSpace={"wrap"}>{row['الشخصية']}</Table.Cell>
+                      <Table.Cell minWidth={{ base: '12rem', md: '20vw' }} whiteSpace={"wrap"}>{row['النص']}</Table.Cell>
+                      <Table.Cell minWidth={{ base: '8rem', md: '10vw' }} whiteSpace={"wrap"}>{row['النبرة']}</Table.Cell>
+                      <Table.Cell minWidth={{ base: '6rem', md: '5vw' }} whiteSpace={"wrap"}>{row['المكان']}</Table.Cell>
+                      <Table.Cell minWidth={{ base: '8rem', md: '7vw' }} whiteSpace={"wrap"}>{row['الخلفية الصوتية']}</Table.Cell>
                     </Table.Row>
                   ))}
                 </Table.Body>}
@@ -434,9 +459,14 @@ export default function Home() {
             </Table.ScrollArea> }
             </Box>
             { totalPages > 0 && 
-              <HStack gap={5} width={'100%'} height={'3em'} justifyContent={'space-between'}>
-                <VStack alignItems={'flex-start'} >
-                  <Progress.Root width="md" max={100} value={isDone ? 100 : currentProgress} colorPalette={isDone ? "green" : "blue"}>
+              <HStack 
+                gap={5} 
+                width={'100%'} 
+                flexDirection={{ base: 'column-reverse', md: 'row' }}
+                justifyContent={{ base: 'center', md: 'space-between' }}
+              >
+                <VStack alignItems={'flex-start'} width={{ base: '100%', md: 'auto' }}>
+                  <Progress.Root width={{ base: '100%', md: 'md' }} max={100} value={isDone ? 100 : currentProgress} colorPalette={isDone ? "green" : "blue"}>
                     <HStack gap="5">
                       <Progress.Track flex="1">
                         <Progress.Range />
@@ -444,13 +474,13 @@ export default function Home() {
                       <Progress.ValueText>{isDone ? 100 : currentProgress}%</Progress.ValueText>
                     </HStack>
                   </Progress.Root>
-                  <HStack fontSize={'sm'} color="gray.500">
+                  <HStack fontSize={{ base: 'xs', md: 'sm' }} color="gray.500">
                     {progressLabel && <Spinner size={'sm'}/>}
                     {progressLabel}
                   </HStack>
                 </VStack>
-                <HStack dir="rtl" gap={5}>
-                  <Button variant="surface" onClick={handleDownload}>
+                <HStack dir="rtl" gap={5} flexDirection={{ base: 'column', sm: 'row' }} width={{ base: '100%', md: 'auto' }}>
+                  <Button variant="surface" onClick={handleDownload} width={{ base: '100%', sm: 'auto' }}>
                     <span>تنزيل الجدول</span>
                     <Icon size="md" color="fg.muted">
                       <LuDownload />
@@ -462,7 +492,7 @@ export default function Home() {
             }
           </VStack>
         </HStack>
-        <Badge as="div" style={{ width: "min-content" }} size="lg"> رقم الإصدار : { process.env.version }</Badge>
+        <Badge as="div" style={{ width: "min-content" }} size={{ base: 'md', md: 'lg' }}> رقم الإصدار : { process.env.version }</Badge>
       </VStack>
     </Container>
   );
