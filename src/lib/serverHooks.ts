@@ -12,13 +12,13 @@ export async function useScanner(
   pdf: File,
   scale: number = 1
 ): Promise<[
-    (pageNumber?: number) => Record<number, string> | string, // get images cache or specific cached image
-    number,
-    (pageNumber: number) => Promise<string> // render page to image and cache it
-  ]> {
-    const imagesCache: Record<number, string> = {};
-    const pdfBuffer = Buffer.from(await new Response(pdf).arrayBuffer());
-    const numberOfPages = await countPages(pdfBuffer, 'pdf');
+  (pageNumber?: number) => Record<number, string> | string, // get images cache or specific cached image
+  number,
+  (pageNumber: number) => Promise<string> // render page to image and cache it
+]> {
+  const imagesCache: Record<number, string> = {};
+  const pdfBuffer = Buffer.from(await new Response(pdf).arrayBuffer());
+  const numberOfPages = await countPages(pdfBuffer, 'pdf');
 
   return [
     (pageNumber?: number) =>
@@ -35,9 +35,9 @@ export async function useScanner(
         format: 'png',
       });
 
-      
+
       const imageBuffer = await scanner(pageNumber, { responseType: 'buffer' });
-      
+
       if (!imageBuffer?.buffer || !Buffer.isBuffer(imageBuffer.buffer) || imageBuffer.buffer.length === 0) {
         throw new Error(`Invalid rendered buffer for page ${pageNumber}`);
       }
@@ -54,7 +54,7 @@ export async function useScanner(
       console.log({
         size: imageBuffer.size,
         mime: "image/png",
-        });
+      });
 
       return base64;
     },
@@ -122,9 +122,18 @@ export async function useSheeter({ readingMemoryLimit }: { readingMemoryLimit: n
       },
     };
 
-    const model = "gemini-2.5-flash";
-
-    const result = await callAI(model, config, conversation);
+    // Fallback between flash and flash-lite models on failure
+    const models = ["gemini-2.5-flash", "gemini-2.5-flash-lite"] as const;
+    let result: any;
+    for (const m of models) {
+      try {
+        result = await callAI(m, config, conversation);
+        break;
+      } catch (err) {
+        console.warn(`Model ${m} failed, trying next if available`, err);
+        if (m === models[models.length - 1]) throw err;
+      }
+    }
     const responseObject = handleConversation(result, conversation);
 
     const lines: LineRow[] = responseObject.map(
