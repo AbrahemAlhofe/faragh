@@ -1,11 +1,24 @@
 FROM node:20-bullseye
-RUN apt-get update && apt-get install -y \
-    build-essential libcairo2-dev libpango1.0-dev libjpeg-dev libgif-dev librsvg2-dev \
-    graphicsmagick ghostscript \
- && rm -rf /var/lib/apt/lists/*
+
+RUN apt-get update
+
+RUN apt-get install -y build-essential libcairo2-dev libpango1.0-dev libjpeg-dev libgif-dev librsvg2-dev graphicsmagick ghostscript
+
+RUN rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
+
+RUN corepack enable pnpm
+
 COPY package*.json ./
-RUN npm install
+
+COPY ./pnpm-lock.yaml ./
+RUN pnpm fetch
+
+RUN pnpm install
+
 COPY . .
+
 EXPOSE 8080
+
 CMD ["npm", "run", "dev"]

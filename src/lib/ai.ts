@@ -1,18 +1,18 @@
-import {
-  GenerateContentResponse,
-  GoogleGenAI,
-} from "@google/genai";
+import OpenAI from "openai";
 import { ReadingMemory, tryCall } from "./utils";
 
-let _ai: GoogleGenAI | null = null;
+let _ai: OpenAI | null = null;
 
-export function getAI(): GoogleGenAI {
+export function getAI(): OpenAI {
   if (!_ai) {
-    const apiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+    const apiKey = process.env.OPEN_ROUTE;
     if (!apiKey) {
-      throw new Error("GOOGLE_GENERATIVE_AI_API_KEY environment variable is not set");
+      throw new Error("OPEN_ROUTE environment variable is not set");
     }
-    _ai = new GoogleGenAI({ apiKey });
+    _ai = new OpenAI({ 
+      baseURL: "https://openrouter.ai/api/v1",
+      apiKey 
+    });
   }
   return _ai;
 }
@@ -21,45 +21,49 @@ export async function callAI(
   model: string,
   config: any,
   conversation: ReadingMemory
-): Promise<GenerateContentResponse | undefined> {
-  const result = await tryCall<GenerateContentResponse>(async () => {
-    const messages = conversation.toMessages();
+) {
+  const result = await tryCall(async () => {
+    const messagesToSend = conversation.toMessages();
     
-    // Ensure the last message is from user role for Google Generative AI API
-    // If the last message is from "model", remove it as it will be added by the API response
-    const messagesToSend = messages.length > 0 && messages[messages.length - 1].role === "model"
-      ? messages.slice(0, -1)
-      : messages;
-    
-    const result = await getAI().models.generateContent({
+    return await getAI().chat.completions.create({
       model,
-      config,
-      contents: messagesToSend,
+      messages: messagesToSend,
+      ...config,
     });
-    return result;
   });
 
   return result;
 }
 
 export function handleConversation(
-  result: GenerateContentResponse | undefined,
+  result: any,
   conversation: ReadingMemory
 ) {
-  if (result === undefined) return [];
+  if (!result || !result.choices || result.choices.length === 0) return [];
 
-  const responseObject = JSON.parse(result.text as string);
-  if (responseObject.length === 0) return [];
+  const messageContent = result.choices[0].message.content;
+  if (!messageContent) return [];
+
+  let responseObject;
+  try {
+    responseObject = JSON.parse(messageContent);
+  } catch (err) {
+    console.error("Failed to parse AI response:", messageContent, err);
+    return [];
+  }
 
   // Add assistant message
   conversation.push({
-    role: "model",
-    parts: [
-      {
-        text: result.text,
-      },
-    ],
+    role: "assistant",
+    content: messageContent,
   });
+
+  // Since we require wrapped JSON objects (e.g. {"results": [...]}) for OpenAI compat,
+  // we attempt to unwrap the results if they are in a known wrapper key like 'results'.
+  // But actually the schema mapping will unpack it later or we can do it here.
+  if (responseObject && !Array.isArray(responseObject) && Array.isArray(responseObject.results)) {
+    return responseObject.results;
+  }
 
   return responseObject;
 }

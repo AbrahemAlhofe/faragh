@@ -3,7 +3,7 @@ import path from 'path';
 import '@ungap/with-resolvers';
 import { ForeignNameRow, LineRow, Row } from '@/lib/types';
 import { ReadingMemory } from "./utils";
-import { Type } from "@google/genai";
+
 import { callAI, handleConversation } from "./ai";
 import { fromBuffer } from 'pdf2pic';
 import countPages from 'page-count';
@@ -70,60 +70,65 @@ export async function useSheeter({ readingMemoryLimit }: { readingMemoryLimit: n
 
     conversation.push({
       role: 'user',
-      parts: [
+      content: [
         {
-          inlineData: {
-            data: image,
-            mimeType: 'image/jpeg',
+          type: "image_url",
+          image_url: {
+            url: `data:image/jpeg;base64,${image}`,
           }
         }
       ],
     })
 
-    const config = {
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.ARRAY,
-        items: {
-          type: Type.OBJECT,
-          required: [
-            "الشخصية",
-            "النص",
-            "النبرة",
-            "المكان",
-            "الخلفية الصوتية",
-          ],
-          properties: {
-            ["الشخصية"]: {
-              type: Type.STRING,
-            },
-            ["النص"]: {
-              type: Type.STRING,
-            },
-            ["النبرة"]: {
-              type: Type.STRING,
-            },
-            ["المكان"]: {
-              type: Type.STRING,
-            },
-            ["الخلفية الصوتية"]: {
-              type: Type.STRING,
-            },
-          },
-        },
-      },
-      systemInstruction: {
+    // System instruction must be sent as a system message at the beginning of the conversation.
+    // We can just prepend it before sending to the model, or add it here if it's the first execution.
+    if (conversation.toMessages().filter(m => m.role === 'system').length === 0) {
+      conversation.toMessages().unshift({
         role: "system",
-        parts: [
-          {
-            text: instructions,
-          },
-        ],
-      },
+        content: instructions
+      });
+    }
+
+    const config = {
+      response_format: {
+        type: "json_schema",
+        json_schema: {
+          name: "results_schema",
+          strict: true,
+          schema: {
+            type: "object",
+            required: ["results"],
+            properties: {
+              results: {
+                type: "array",
+                items: {
+                  type: "object",
+                  required: [
+                    "الشخصية",
+                    "النص",
+                    "النبرة",
+                    "المكان",
+                    "الخلفية الصوتية",
+                  ],
+                  properties: {
+                    "الشخصية": { type: "string" },
+                    "النص": { type: "string" },
+                    "النبرة": { type: "string" },
+                    "المكان": { type: "string" },
+                    "الخلفية الصوتية": { type: "string" },
+                  },
+                  additionalProperties: false
+                }
+              }
+            },
+            additionalProperties: false
+          }
+        }
+      }
     };
 
     // Fallback between flash and flash-lite models on failure
-    const models = ["gemini-2.5-flash", "gemini-2.5-flash-lite"] as const;
+    const models = ["google/gemini-2.5-flash", "google/gemini-2.5-flash-lite"] as const;
     let result: any;
     for (const m of models) {
       try {
@@ -170,59 +175,62 @@ export async function useForeignNamesExtractor({ readingMemoryLimit }: { reading
 
     conversation.push({
       role: 'user',
-      parts: [
+      content: [
         {
-          inlineData: {
-            data: image,
-            mimeType: 'image/png',
+          type: "image_url",
+          image_url: {
+            url: `data:image/png;base64,${image}`,
           }
         }
       ],
     })
 
-    const config = {
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.ARRAY,
-        items: {
-          type: Type.OBJECT,
-          required: [
-            "الإسم بالعربي",
-            "الإسم باللغة الأجنبية",
-            "الرابط الأول",
-            "الرابط الثاني",
-            "الرابط الثالث",
-          ],
-          properties: {
-            ["الإسم بالعربي"]: {
-              type: Type.STRING,
-            },
-            ["الإسم باللغة الأجنبية"]: {
-              type: Type.STRING,
-            },
-            ["الرابط الأول"]: {
-              type: Type.STRING,
-            },
-            ["الرابط الثاني"]: {
-              type: Type.STRING,
-            },
-            ["الرابط الثالث"]: {
-              type: Type.STRING,
-            },
-          },
-        },
-      },
-      systemInstruction: {
+    if (conversation.toMessages().filter(m => m.role === 'system').length === 0) {
+      conversation.toMessages().unshift({
         role: "system",
-        parts: [
-          {
-            text: instructions,
-          },
-        ],
-      },
+        content: instructions
+      });
+    }
+
+    const config = {
+      response_format: {
+        type: "json_schema",
+        json_schema: {
+          name: "results_schema",
+          strict: true,
+          schema: {
+            type: "object",
+            required: ["results"],
+            properties: {
+              results: {
+                type: "array",
+                items: {
+                  type: "object",
+                  required: [
+                    "الإسم بالعربي",
+                    "الإسم باللغة الأجنبية",
+                    "الرابط الأول",
+                    "الرابط الثاني",
+                    "الرابط الثالث",
+                  ],
+                  properties: {
+                    "الإسم بالعربي": { type: "string" },
+                    "الإسم باللغة الأجنبية": { type: "string" },
+                    "الرابط الأول": { type: "string" },
+                    "الرابط الثاني": { type: "string" },
+                    "الرابط الثالث": { type: "string" },
+                  },
+                  additionalProperties: false
+                }
+              }
+            },
+            additionalProperties: false
+          }
+        }
+      }
     };
 
-    const model = "gemini-2.5-flash";
+    const model = "google/gemini-2.5-flash";
 
     const result = await callAI(model, config, conversation);
     const responseObject = handleConversation(result, conversation);

@@ -44,16 +44,14 @@ export type Summary = string;
 export type PDFJs = typeof import('pdfjs-dist');
 
 export type Message = {
-  role: string;
-  parts: Array<{
-    text?: string;
-    fileData?: {
-      fileUri: string;
-      mimeType: string;
-    };
-    inlineData?: {
-      data: string;
-      mimeType: string;
+  role: "system" | "user" | "assistant";
+  content: string | Array<{
+    type: "text";
+    text: string;
+  } | {
+    type: "image_url";
+    image_url: {
+      url: string;
     };
   }>;
 }
