@@ -1,5 +1,6 @@
 "use client";
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
+import { useSearchParams, useRouter, usePathname } from 'next/navigation';
 import {
   Box,
   Button,
@@ -44,6 +45,11 @@ export default function Home() {
   const [selectedMode, setSelectedMode] = useState<SESSION_MODES | null>(SESSION_MODES.NAMES);
   const [pdfJs, setPdfJs] = useState<PDFJs | null>(null);
 
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
+  const urlSessionId = useMemo(() => searchParams.get('sessionId'), [searchParams]);
+
   const modes = [
     { value: SESSION_MODES.NAMES, title: "الأسماء" },
     { value: SESSION_MODES.LINES, title: "الجمل" }
@@ -52,7 +58,46 @@ export default function Home() {
   useEffect(() => {
     console.info("PDF.js loaded:", pdfJs?.version);
     console.info("Next.js version:", nextJsVersion.version);
-  }, [pdfJs]);
+    
+    // Initial Rehydration from URL
+    if (urlSessionId && pdfJs && !sessionId) {
+      const rehydrate = async () => {
+        try {
+          setIsUploading(true);
+          const res = await fetch(`/api/sessions/${urlSessionId}/status`);
+          if (!res.ok) throw new Error("Session not found");
+          const data = await res.json();
+          
+          // Fetch the PDF file
+          const pdfRes = await fetch(`/api/sessions/${urlSessionId}/pdf`);
+          let rehydratedFile = null;
+          if (pdfRes.ok) {
+            const blob = await pdfRes.blob();
+            rehydratedFile = new File([blob], data.pdfFilename, { type: 'application/pdf' });
+            setFile(rehydratedFile);
+          }
+          
+          setSessionId(urlSessionId);
+          setSelectedMode(data.mode);
+          setProgressDetails(data.sheet);
+          
+          if (pdfJs && rehydratedFile) {
+             const pdf = await pdfJs.getDocument({ data: await (rehydratedFile as File).arrayBuffer() }).promise;
+             setTotalPages(pdf.numPages);
+             setEndPage(pdf.numPages);
+             pdf.destroy();
+          }
+          document.title = `فراغ استوديو | ${data.pdfFilename.replace(".pdf", "")}`
+          
+          setIsUploading(false);
+        } catch (err) {
+          console.error("Rehydration failed:", err);
+          setIsUploading(false);
+        }
+      };
+      rehydrate();
+    }
+  }, [pdfJs, urlSessionId]);
   console.info("Build time:", process.env.buildTime);
 
   useEffect(() => {
@@ -124,6 +169,12 @@ export default function Home() {
         pdf.destroy();
         setFile(file);
         document.title = `فراغ استوديو | ${file.name.replace(".pdf", "")}`
+        
+        // Update URL with session ID
+        const params = new URLSearchParams(searchParams.toString());
+        params.set('sessionId', sessionId);
+        router.push(`${pathname}?${params.toString()}`, { scroll: false });
+        
         setIsUploading(false);
       } catch (error) {
         if (error instanceof Error) {
@@ -146,6 +197,14 @@ export default function Home() {
         duration: 3000,
       });
       return;
+    }
+
+    if (currentProgress > 0 && !isProcessing && !isDone) {
+      toaster.create({
+        title: 'جاري استئناف التفريغ...',
+        type: 'info',
+        duration: 3000
+      });
     }
 
     setIsUploading(true);
@@ -299,6 +358,11 @@ export default function Home() {
     setEndPage(0);
     setPdfViewerCursor(1);
     
+    // Clear URL sessionId
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete('sessionId');
+    const newUrl = params.toString() ? `${pathname}?${params.toString()}` : pathname;
+    router.push(newUrl, { scroll: false });
 };
 
   return (
@@ -355,7 +419,7 @@ export default function Home() {
             </FileUpload.Root> }
             {file != null && <PDFViewer engine={pdfJs} file={file} cursor={pdfViewerCursor}></PDFViewer>}
             { file != null && <Button  colorPalette={'blue'} onClick={handleConvert} loading={isUploading} variant="surface" width={'100%'}>
-              فرغ النص
+              {(currentProgress > 0 && !isProcessing && !isDone) ? "استئناف التفريغ" : "فرغ النص"}
             </Button> }
             { file != null && !isProcessing && <Button  colorPalette={'gray'} onClick={handleReset} loading={isUploading} variant="outline" width={'100%'}>
               رفع كتاب آخر            

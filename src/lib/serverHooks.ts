@@ -2,9 +2,9 @@ import fs from 'fs/promises';
 import path from 'path';
 import '@ungap/with-resolvers';
 import { ForeignNameRow, LineRow, Row } from '@/lib/types';
-import { ReadingMemory } from "./utils";
+import { ReadingMemory, tryCall } from "./utils";
 
-import { callAI, handleConversation } from "./ai";
+import { callAI, getAI, handleConversation } from "./ai";
 import { fromBuffer } from 'pdf2pic';
 import countPages from 'page-count';
 
@@ -61,14 +61,29 @@ export async function useScanner(
   ];
 }
 
-export async function useSheeter({ readingMemoryLimit }: { readingMemoryLimit: number } = { readingMemoryLimit: 10 }): Promise<[LineRow[], (key: number, image: string) => Promise<LineRow[]>]> {
+export async function useSheeter({ readingMemoryLimit }: { readingMemoryLimit: number } = { readingMemoryLimit: 10 }): Promise<[LineRow[], (key: number, image: string, previousResults?: any[]) => Promise<LineRow[]>]> {
   const conversation: ReadingMemory = new ReadingMemory(readingMemoryLimit ?? 10);
   const sheet: LineRow[] = [];
   const instructions = await fs.readFile(path.join('src/lib/prompts', 'sheetify.md'), 'utf-8');
 
-  async function extract(key: number, image: string): Promise<LineRow[]> {
+  async function extract(key: number, image: string, previousResults: any[] = []): Promise<LineRow[]> {
 
-    conversation.push({
+    const messages: any[] = [
+      { role: "system", content: instructions }
+    ];
+
+    if (previousResults.length > 0) {
+      messages.push({
+        role: "user",
+        content: `Here are the results from previous pages for context (to maintain consistency and avoid duplicates):\n${JSON.stringify(previousResults.slice(-50))}`
+      });
+      messages.push({
+        role: "assistant",
+        content: "Understood. I will use this context to maintain consistency and avoid duplicates in the new extraction."
+      });
+    }
+
+    messages.push({
       role: 'user',
       content: [
         {
@@ -76,18 +91,13 @@ export async function useSheeter({ readingMemoryLimit }: { readingMemoryLimit: n
           image_url: {
             url: `data:image/jpeg;base64,${image}`,
           }
+        },
+        {
+          type: "text",
+          text: "Please extract the data from this page according to the instructions."
         }
       ],
-    })
-
-    // System instruction must be sent as a system message at the beginning of the conversation.
-    // We can just prepend it before sending to the model, or add it here if it's the first execution.
-    if (conversation.toMessages().filter(m => m.role === 'system').length === 0) {
-      conversation.toMessages().unshift({
-        role: "system",
-        content: instructions
-      });
-    }
+    });
 
     const config = {
       response_format: {
@@ -125,14 +135,20 @@ export async function useSheeter({ readingMemoryLimit }: { readingMemoryLimit: n
           }
         }
       }
-    };
+    } as const;
 
     // Fallback between flash and flash-lite models on failure
     const models = ["google/gemini-2.5-flash", "google/gemini-2.5-flash-lite"] as const;
     let result: any;
     for (const m of models) {
       try {
-        result = await callAI(m, config, conversation);
+        result = await tryCall(async () => {
+          return await getAI().chat.completions.create({
+            model: m,
+            messages: messages,
+            ...config,
+          });
+        });
         break;
       } catch (err) {
         console.warn(`Model ${m} failed, trying next if available`, err);
@@ -166,14 +182,29 @@ export async function useSheeter({ readingMemoryLimit }: { readingMemoryLimit: n
   return [sheet, extract] as const;
 }
 
-export async function useForeignNamesExtractor({ readingMemoryLimit }: { readingMemoryLimit: number } = { readingMemoryLimit: 10 }): Promise<[ForeignNameRow[], (key: number, image: string) => Promise<ForeignNameRow[]>]> {
+export async function useForeignNamesExtractor({ readingMemoryLimit }: { readingMemoryLimit: number } = { readingMemoryLimit: 10 }): Promise<[ForeignNameRow[], (key: number, image: string, previousResults?: any[]) => Promise<ForeignNameRow[]>]> {
   const conversation: ReadingMemory = new ReadingMemory(readingMemoryLimit ?? 10);
   const sheet: ForeignNameRow[] = [];
   const instructions = await fs.readFile(path.join('src/lib/prompts', 'foreign-name-extraction.md'), 'utf-8');
 
-  async function extract(key: number, image: string): Promise<ForeignNameRow[]> {
+  async function extract(key: number, image: string, previousResults: any[] = []): Promise<ForeignNameRow[]> {
 
-    conversation.push({
+    const messages: any[] = [
+      { role: "system", content: instructions }
+    ];
+
+    if (previousResults.length > 0) {
+      messages.push({
+        role: "user",
+        content: `Here are the results from previous pages for context (to maintain consistency and avoid duplicates):\n${JSON.stringify(previousResults.slice(-50))}`
+      });
+      messages.push({
+        role: "assistant",
+        content: "Understood. I will use this context to maintain consistency and avoid duplicates in the new extraction."
+      });
+    }
+
+    messages.push({
       role: 'user',
       content: [
         {
@@ -181,16 +212,13 @@ export async function useForeignNamesExtractor({ readingMemoryLimit }: { reading
           image_url: {
             url: `data:image/png;base64,${image}`,
           }
+        },
+        {
+          type: "text",
+          text: "Please extract the names from this page according to the instructions."
         }
       ],
-    })
-
-    if (conversation.toMessages().filter(m => m.role === 'system').length === 0) {
-      conversation.toMessages().unshift({
-        role: "system",
-        content: instructions
-      });
-    }
+    });
 
     const config = {
       response_format: {
@@ -228,11 +256,17 @@ export async function useForeignNamesExtractor({ readingMemoryLimit }: { reading
           }
         }
       }
-    };
+    } as const;
 
     const model = "google/gemini-2.5-flash";
 
-    const result = await callAI(model, config, conversation);
+    const result = await tryCall(async () => {
+      return await getAI().chat.completions.create({
+        model,
+        messages: messages,
+        ...config,
+      });
+    });
     const responseObject = handleConversation(result, conversation);
 
     const lines: ForeignNameRow[] = responseObject.map(
