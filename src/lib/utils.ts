@@ -124,6 +124,31 @@ export function convertToXLSX(data: any[]): Uint8Array {
     return Promise.all(promises);
   }
 
+  export async function limitConcurrency<T>(concurrency: number, tasks: (() => Promise<T>)[]): Promise<T[]> {
+    const results: T[] = [];
+    const queue = [...tasks];
+    const executing = new Set<Promise<any>>();
+
+    const processQueue = async () => {
+      while (queue.length > 0) {
+        const taskIndex = tasks.length - queue.length;
+        const task = queue.shift()!;
+        const promise = task().then(result => {
+          results[taskIndex] = result;
+          executing.delete(promise);
+        });
+        executing.add(promise);
+        if (executing.size >= concurrency) {
+          await Promise.race(executing);
+        }
+      }
+      await Promise.all(executing);
+    };
+
+    await processQueue();
+    return results;
+  }
+
   export function base64ToBlob (base64Data: string, contentType: string = 'image/png'): Blob {
     const byteCharacters = atob(base64Data.split(',')[1]);
     const byteArrays = [];
@@ -182,6 +207,18 @@ export class ReadingMemory {
 
   toMessages(): Message[] {
     return this.memory;
+  }
+
+  pruneImages() {
+    this.memory = this.memory.map(msg => {
+      if (Array.isArray(msg.content)) {
+        return {
+          ...msg,
+          content: msg.content.filter(part => part.type !== 'image_url')
+        };
+      }
+      return msg;
+    });
   }
 
   clear() {
