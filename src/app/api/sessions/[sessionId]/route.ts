@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ForeignNameRow, LineRow, SESSION_MODES, SESSION_STAGES, SessionProgress, SheetFile } from "@/lib/types";
 import { useForeignNamesExtractor, useScanner, useSheeter } from "@/lib/serverHooks";
-import { convertToXLSX, filterSimilarEnglishNames, normalizeEnglishName, parallelReading } from "@/lib/utils";
+import { convertToXLSX, filterSimilarEnglishNames, limitConcurrency, normalizeEnglishName, parallelReading } from "@/lib/utils";
 import { getRedis } from "@/lib/redis";
+import fs from "fs/promises";
+import path from "path";
 
 async function validateLink(url: string, signal?: AbortSignal): Promise<string> {
   try {
@@ -23,7 +25,7 @@ export async function POST(
 ) {
 
   const signal = req.signal;
-  
+
   // Check if already aborted
   if (signal.aborted) {
     return new NextResponse("Client connection aborted", { status: 499 });
@@ -33,8 +35,30 @@ export async function POST(
   const formData = await req.formData();
   const file = formData.get("file") as File;
   let sheetFile: SheetFile<ForeignNameRow> | SheetFile<LineRow> = { pdfFilename: file.name, sheet: [] };
+  let processedPages: number[] = [];
+
+  const existingSheet = await getRedis().get(`${sessionId}/sheet`);
+  if (existingSheet) {
+    try {
+      sheetFile = JSON.parse(existingSheet);
+    } catch { }
+  }
+
+  const existingState = await getRedis().get(`${sessionId}/state`);
+  if (existingState) {
+    try {
+      processedPages = JSON.parse(existingState).processedPages || [];
+    } catch { }
+  }
 
   if (!file) return NextResponse.json({ error: "No file uploaded" }, { status: 400 });
+
+  // Save PDF locally for persistence
+  const storageDir = path.join(process.cwd(), "storage", "pdfs");
+  await fs.mkdir(storageDir, { recursive: true });
+  const pdfPath = path.join(storageDir, `${sessionId}.pdf`);
+  const fileArrayBuffer = await file.arrayBuffer();
+  await fs.writeFile(pdfPath, Buffer.from(fileArrayBuffer));
 
   try {
     // Check abort signal before starting processing
@@ -46,12 +70,12 @@ export async function POST(
     );
     const endPage = parseInt(req.nextUrl.searchParams.get("endPage") || "1", 10);
     const mode: SESSION_MODES = req.nextUrl.searchParams.get("mode") as SESSION_MODES || SESSION_MODES.NAMES;
-    
+
     console.log(`\n=== POST REQUEST START ===`);
     console.log(`[POST] sessionId: ${sessionId}`);
     console.log(`[POST] mode: ${mode}`);
     console.log(`[POST] pages: ${startPage}-${endPage}`);
-    
+
     const totalPages = endPage - startPage + 1;
     const contentType = req.headers.get("content-type") || "";
     const sessionProgress: SessionProgress<{}> = { stage: SESSION_STAGES.IDLE, cursor: 1, progress: 0, details: [] }
@@ -69,85 +93,123 @@ export async function POST(
     }
 
     const [images, numberOfPages, scan] = await useScanner(file);
-    const scannedPages = [];
-    await parallelReading(numberOfPages, async (pageNum: number) => {
-      signal.throwIfAborted(); // Check before scanning each page
-      if ( pageNum < startPage || pageNum > endPage ) return;
+    const scannedPages: number[] = [];
+    const pagesToScan = [];
+    for (let pageNum = 1; pageNum <= numberOfPages; pageNum++) {
+      if (pageNum >= startPage && pageNum <= endPage && !processedPages.includes(pageNum)) {
+        pagesToScan.push(pageNum);
+      }
+    }
+
+    await limitConcurrency(10, pagesToScan.map(pageNum => async () => {
+      signal.throwIfAborted();
       await scan(pageNum);
       scannedPages.push(pageNum);
-      await getRedis().set(`${sessionId}/progress`, JSON.stringify({ stage: "SCANNING", cursor: pageNum, progress: Math.floor((scannedPages.length / totalPages) * 100), details: "" }));
-    });
+      await getRedis().set(`${sessionId}/progress`, JSON.stringify({ 
+        stage: "SCANNING", 
+        cursor: pageNum, 
+        progress: Math.floor((scannedPages.length / pagesToScan.length) * 100), 
+        details: "" 
+      }));
+    }));
 
     if (mode === SESSION_MODES.NAMES) {
       console.log(`[POST NAMES] Starting extraction...`);
 
-      const [_sheet, extract] = await useForeignNamesExtractor({ readingMemoryLimit: 100 });
+      const [_sheet, extract] = await useForeignNamesExtractor({ readingMemoryLimit: 20 });
       sheetFile = { pdfFilename: file.name, sheet: _sheet };
       console.log(`[POST NAMES] Initial sheet from extractor: ${sheetFile.sheet.length} rows`);
-      
+
       const seenNames = new Set<string>(); // Track normalized names we've already added
       
+      const pagesToProcess = [];
       for (let i = startPage; i <= endPage; i++) {
-        signal.throwIfAborted(); // Check before processing each page
+        if (!processedPages.includes(i)) pagesToProcess.push(i);
+      }
+
+      await limitConcurrency(5, pagesToProcess.map(i => async () => {
+        signal.throwIfAborted();
         const image = images(i) as string;
-        const lines = await extract(i, image);
+        // Pass a snapshot of the current sheet to maintain context without image bloat
+        const lines = await extract(i, image, sheetFile.sheet);
+        
         const validateLines = await Promise.all(
-          lines.map( async line => {
-            if(line["الرابط الأول"]) line["الرابط الأول"] = await validateLink(line["الرابط الأول"], signal);
-            if(line["الرابط الثاني"]) line["الرابط الثاني"] = await validateLink(line["الرابط الثاني"], signal);
-            if(line["الرابط الثالث"]) line["الرابط الثالث"] = await validateLink(line["الرابط الثالث"], signal);
+          lines.map(async line => {
+            if (line["الرابط الأول"]) line["الرابط الأول"] = await validateLink(line["الرابط الأول"], signal);
+            if (line["الرابط الثاني"]) line["الرابط الثاني"] = await validateLink(line["الرابط الثاني"], signal);
+            if (line["الرابط الثالث"]) line["الرابط الثالث"] = await validateLink(line["الرابط الثالث"], signal);
             return line;
           })
-        )
-        
-        // Filter out duplicates before adding to sheet
+        );
+
+        // Filter out duplicates
         const uniqueLines = validateLines.filter((line) => {
           const englishName = line["الإسم باللغة الأجنبية"] ?? "";
           const normalized = normalizeEnglishName(englishName);
-          
-          console.log(`[EXTRACT] Raw: "${englishName}" | Normalized: "${normalized}" | Already seen: ${seenNames.has(normalized)}`);
-          
-          if (!normalized) {
-            // Keep rows with no English name
-            console.log(`[EXTRACT] -> KEEPING (empty name)`);
-            return true;
-          }
-          
-          if (seenNames.has(normalized)) {
-            // Skip if we already have this normalized name
-            console.log(`[EXTRACT] -> SKIPPING (duplicate)`);
-            return false;
-          }
-          
-          // First time seeing this name, add to set and keep the row
+          if (!normalized) return true;
+          if (seenNames.has(normalized)) return false;
           seenNames.add(normalized);
-          console.log(`[EXTRACT] -> KEEPING (new)`);
           return true;
         });
-        
-        console.log(`[EXTRACT] Page ${i}: Extracted ${validateLines.length}, Keeping ${uniqueLines.length}, Duplicates removed: ${validateLines.length - uniqueLines.length}`);
+
         sheetFile.sheet.push(...uniqueLines);
-        await getRedis().set(`${sessionId}/progress`, JSON.stringify({ stage: "EXTRACTING", cursor: i, progress: Math.round(((i - startPage + 1) / totalPages) * 100), details: JSON.stringify(uniqueLines) }));
-      }
+        sheetFile.sheet.sort((a, b) => (a['رقم الصفحة'] - b['رقم الصفحة']) || (a['رقم النص'] - b['رقم النص']));
+        processedPages.push(i);
+        
+        // Update Redis (less frequent saves of the full sheet could be done here, 
+        // but for now let's keep it per-page or batch it. 
+        // Actually, with parallel execution, we should probably save after each page finishes 
+        // or at the end of the whole run for better performance.)
+        await getRedis().set(`${sessionId}/state`, JSON.stringify({ processedPages, mode }), "EX", 60 * 60 * 5);
+        await getRedis().set(`${sessionId}/progress`, JSON.stringify({ 
+          stage: "EXTRACTING", 
+          cursor: i, 
+          progress: Math.round(((processedPages.length / totalPages) * 100)), 
+          details: JSON.stringify(uniqueLines) 
+        }));
+      }));
+
+      // Final save of the full sheet and state with mode
+      await getRedis().set(`${sessionId}/state`, JSON.stringify({ processedPages, mode }), "EX", 60 * 60 * 5);
+      await getRedis().set(`${sessionId}/sheet`, JSON.stringify(sheetFile), "EX", 60 * 60 * 5);
 
     }
 
     if (mode === SESSION_MODES.LINES) {
 
       const [_sheet, extract] = await useSheeter({ readingMemoryLimit: 15 });
-      sheetFile =  { pdfFilename: file.name, sheet: _sheet };
+      sheetFile = { pdfFilename: file.name, sheet: _sheet };
+      const pagesToProcess = [];
       for (let i = startPage; i <= endPage; i++) {
-        signal.throwIfAborted(); // Check before processing each page
-        const image = images(i) as string;
-        const lines = await extract(i, image);
-        await getRedis().set(`${sessionId}/progress`, JSON.stringify({ stage: "EXTRACTING", cursor: i, progress: Math.round(((i - startPage + 1) / totalPages) * 100), details: JSON.stringify(lines) }));
+        if (!processedPages.includes(i)) pagesToProcess.push(i);
       }
-    
+
+      await limitConcurrency(5, pagesToProcess.map(i => async () => {
+        signal.throwIfAborted();
+        const image = images(i) as string;
+        // Pass a snapshot of the current sheet to maintain context without image bloat
+        const lines = await extract(i, image, sheetFile.sheet);
+        sheetFile.sheet.push(...lines);
+        sheetFile.sheet.sort((a, b) => (a['رقم الصفحة'] - b['رقم الصفحة']) || (a['رقم النص'] - b['رقم النص']));
+        processedPages.push(i);
+        await getRedis().set(`${sessionId}/state`, JSON.stringify({ processedPages, mode }), "EX", 60 * 60 * 5);
+        await getRedis().set(`${sessionId}/progress`, JSON.stringify({ 
+          stage: "EXTRACTING", 
+          cursor: i, 
+          progress: Math.round(((processedPages.length / totalPages) * 100)), 
+          details: JSON.stringify(lines) 
+        }));
+      }));
+
+      // Final save of the full sheet and state with mode
+      await getRedis().set(`${sessionId}/state`, JSON.stringify({ processedPages, mode }), "EX", 60 * 60 * 5);
+      await getRedis().set(`${sessionId}/sheet`, JSON.stringify(sheetFile), "EX", 60 * 60 * 5);
+
     }
 
     console.log(`[POST] Final sheet size: ${sheetFile.sheet.length} rows`);
     console.log(`[POST] Saving to Redis at key: ${sessionId}/sheet`);
-    
+
     await getRedis().set(
       `${sessionId}/sheet`,
       JSON.stringify(sheetFile),
@@ -158,7 +220,7 @@ export async function POST(
     const protocol = req.nextUrl.protocol;
     const host = req.headers.get("host") || req.nextUrl.host;
     const sheetUrl = `${protocol}//${host}/api/sessions/${sessionId}`;
-  
+
     return NextResponse.json({ sheetUrl }, { status: 200 });
 
   } catch (error: any) {
@@ -234,12 +296,15 @@ export async function GET(
 
   console.log(`[GET /api/sessions/${sessionId}] Starting download...`);
   console.log(`[GET] Data array length BEFORE filter: ${dataArray.length}`);
-  
+
+  // Sort by page and text number
+  dataArray.sort((a, b) => (a['رقم الصفحة'] - b['رقم الصفحة']) || (a['رقم النص'] - b['رقم النص']));
+
   const filtered = filterSimilarEnglishNames(dataArray);
-  
+
   console.log(`[GET] Data array length AFTER filter: ${filtered.length}`);
   console.log(`[GET] Removed ${dataArray.length - filtered.length} duplicate rows`);
-  
+
   const xlsxBuffer = convertToXLSX(filtered);
 
   const filename = `${pdfFilename.replace(".pdf", "")}.xlsx`;
@@ -268,6 +333,7 @@ export async function DELETE(
 
   await getRedis().del(`${sessionId}/progress`);
   await getRedis().del(`${sessionId}/sheet`);
+  await getRedis().del(`${sessionId}/state`);
 
   return NextResponse.json({ success: true }, { status: 200 });
 }
