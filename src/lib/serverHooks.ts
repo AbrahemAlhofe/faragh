@@ -237,16 +237,12 @@ export async function useForeignNamesExtractor({ readingMemoryLimit }: { reading
                   required: [
                     "الإسم بالعربي",
                     "الإسم باللغة الأجنبية",
-                    "الرابط الأول",
-                    "الرابط الثاني",
-                    "الرابط الثالث",
+                    "اللغة"
                   ],
                   properties: {
                     "الإسم بالعربي": { type: "string" },
                     "الإسم باللغة الأجنبية": { type: "string" },
-                    "الرابط الأول": { type: "string" },
-                    "الرابط الثاني": { type: "string" },
-                    "الرابط الثالث": { type: "string" },
+                    "اللغة": { type: "string" },
                   },
                   additionalProperties: false
                 }
@@ -270,11 +266,22 @@ export async function useForeignNamesExtractor({ readingMemoryLimit }: { reading
     const responseObject = handleConversation(result, conversation);
 
     const lines: ForeignNameRow[] = responseObject.map(
-      (line: Omit<ForeignNameRow, "رقم النص" | "رقم الصفحة">, index: number) => ({
-        ...line,
-        ["رقم الصفحة"]: key,
-        ["رقم النص"]: index + 1,
-      })
+      (line: Omit<ForeignNameRow, "رقم النص" | "رقم الصفحة">, index: number) => {
+        const name = line["الإسم باللغة الأجنبية"];
+        const nameParts = name.split(' ');
+        const namePartOne = encodeURIComponent(nameParts[0]);
+        const namePartTwo = encodeURIComponent(nameParts[1]);
+
+        return {
+          ...line,
+          ["رقم الصفحة"]: key,
+          ["رقم النص"]: index + 1,
+          ["الرابط الأول"]: `https://youglish.com/pronounce/${encodeURIComponent(name)}`,
+          ["الرابط الثاني"]: namePartOne ? `https://youglish.com/pronounce/${namePartOne}` : "",
+          ["الرابط الثالث"]: namePartTwo ? `https://youglish.com/pronounce/${namePartTwo}` : "",
+        }
+
+      }
     );
 
     if (responseObject.length === 0) return [];

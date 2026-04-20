@@ -69,3 +69,10 @@ export type SessionProgress<T> = {
   progress: number;
   details: T;
 }
+
+export type Session = {
+  id: string;
+  filename: string;
+  createdAt: number;
+  mode?: SESSION_MODES;
+};
