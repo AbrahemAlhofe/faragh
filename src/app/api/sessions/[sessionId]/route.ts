@@ -76,6 +76,13 @@ export async function POST(
     console.log(`[POST] mode: ${mode}`);
     console.log(`[POST] pages: ${startPage}-${endPage}`);
 
+    // Update session metadata and index it
+    await getRedis().hset('sessions:metadata', sessionId, JSON.stringify({
+      filename: file.name,
+      createdAt: Date.now()
+    }));
+    await getRedis().sadd('sessions:index', sessionId);
+
     const totalPages = endPage - startPage + 1;
     const contentType = req.headers.get("content-type") || "";
     const sessionProgress: SessionProgress<{}> = { stage: SESSION_STAGES.IDLE, cursor: 1, progress: 0, details: [] }
@@ -331,9 +338,14 @@ export async function DELETE(
     return NextResponse.json({ error: "No sessionId provided" }, { status: 400 });
   }
 
+  // Delete storage
   await getRedis().del(`${sessionId}/progress`);
   await getRedis().del(`${sessionId}/sheet`);
   await getRedis().del(`${sessionId}/state`);
+  
+  // Remove from index
+  await getRedis().srem('sessions:index', sessionId);
+  await getRedis().hdel('sessions:metadata', sessionId);
 
   return NextResponse.json({ success: true }, { status: 200 });
 }
