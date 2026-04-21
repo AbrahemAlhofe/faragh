@@ -8,19 +8,19 @@ export default function PDFViewer({ engine, file, cursor = 1 }: { engine: typeof
     useEffect(() => {
         let isMounted = true;
         let localPdfDoc: any;
-    
+
         (async () => {
-            if ( engine == null ) return;
+            if (engine == null) return;
 
             localPdfDoc = await engine.getDocument({ data: await file.arrayBuffer() }).promise;
-    
+
             if (isMounted) {
                 setPdfDocument(localPdfDoc);
             } else {
                 localPdfDoc?.destroy();
             }
         })();
-    
+
         return () => {
             isMounted = false;
             localPdfDoc?.destroy();
@@ -38,15 +38,15 @@ export default function PDFViewer({ engine, file, cursor = 1 }: { engine: typeof
             const viewport = page.getViewport({ scale: 0.9 });
             const canvas = document.createElement('canvas');
             const context = canvas.getContext('2d');
-        
+
             canvas.width = viewport.width;
             canvas.height = viewport.height;
-        
+
             const renderContext = {
                 canvasContext: context!,
                 viewport: viewport,
             };
-        
+
             await page.render(renderContext).promise;
             const imageData = canvas.toDataURL('image/png');
             const blob = base64ToBlob(imageData, 'image/png');
@@ -56,9 +56,9 @@ export default function PDFViewer({ engine, file, cursor = 1 }: { engine: typeof
     }, [pdfDocument, cursor]);
 
     return (
-        <Container width={'20vw'} height={'45vh'} style={{display: "flex", justifyContent: "center", alignItems: "center", marginTop: '5vh'}}>
-            {thumbnail == null && <Spinner /> }
-            {thumbnail != null && <img src={thumbnail} style={{minWidth: '15vw', objectFit: 'contain'}} alt="current page thumbnail" width={'20vw'} height={'40vh'}/>}
+        <Container width={'15vw'} height={'40vh'} style={{ display: "flex", justifyContent: "center", alignItems: "center", marginTop: '5vh', marginBottom: '5vh' }}>
+            {thumbnail == null && <Spinner />}
+            {thumbnail != null && <img src={thumbnail} style={{ minWidth: '15vw', objectFit: 'contain' }} alt="current page thumbnail" width={'20vw'} height={'40vh'} />}
         </Container>
     );
 }
