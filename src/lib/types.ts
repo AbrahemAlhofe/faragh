@@ -75,4 +75,5 @@ export type Session = {
   filename: string;
   createdAt: number;
   mode?: SESSION_MODES;
+  status?: "processing" | "completed" | "error";
 };

@@ -100,8 +100,18 @@ export default function Sidebar({ currentSessionId, sessions, isLoading, onSelec
               bg={currentSessionId === session.id ? 'whiteAlpha.100' : 'transparent'}
               _hover={{ bg: 'whiteAlpha.50' }}
               onClick={() => onSelectSession(session.id)}
-              borderRight="2px solid"
-              borderColor={currentSessionId === session.id ? 'blue.400' : 'transparent'}
+              border="2px solid"
+              borderColor={
+                session.status === "completed"
+                  ? "green.400"
+                  : session.status === "processing"
+                    ? "yellow.400"
+                    : session.status === "error"
+                      ? "red.400"
+                      : currentSessionId === session.id
+                        ? "blue.400"
+                        : "transparent"
+              }
             >
               <VStack alignItems="stretch" gap={1}>
                 <HStack gap={3}>
@@ -109,16 +119,31 @@ export default function Sidebar({ currentSessionId, sessions, isLoading, onSelec
                   <Text
                     fontSize="sm"
                     fontWeight={currentSessionId === session.id ? 'bold' : 'medium'}
-                    noOfLines={1}
+                    color={currentSessionId === session.id ? 'blue.400' : 'white'}
+                    // noOfLines={1}
+                    flex={1}
+                    minWidth={0}
+                    // maxWidth={'full'}
                     dir="rtl"
                   >
                     {session.filename.replace('.pdf', '')}
                   </Text>
                 </HStack>
                 <HStack justifyContent="space-between">
-                  <Text fontSize="xs" color="gray.500">
-                    {new Date(session.createdAt).toLocaleDateString('ar-EG', { month: 'short', day: 'numeric' })}
-                  </Text>
+                  <HStack gap={1}>
+                    <Text fontSize="xs" color="gray.500">
+                      {new Date(session.createdAt).toLocaleDateString('ar-EG', { month: 'short', day: 'numeric' })}
+                    </Text>
+                    <Text fontSize="xs" color="gray.500">
+                      {session.status === "completed"
+                        ? "تم التفريغ"
+                        : session.status === "processing"
+                          ? "جاري التفريغ"
+                          : session.status === "error"
+                            ? "خطأ في التفريغ"
+                            : ""}
+                    </Text>
+                  </HStack>
                   <IconButton
                     aria-label="Delete Session"
                     size="xs"

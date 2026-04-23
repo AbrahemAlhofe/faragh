@@ -6,6 +6,16 @@ import { getRedis } from "@/lib/redis";
 import fs from "fs/promises";
 import path from "path";
 
+async function updateSessionStatus(sessionId: string, status: string) {
+  const raw = await getRedis().hget('sessions:metadata', sessionId);
+  if (!raw) return;
+
+  const meta = JSON.parse(raw);
+  meta.status = status;
+
+  await getRedis().hset('sessions:metadata', sessionId, JSON.stringify(meta));
+}
+
 async function validateLink(url: string, signal?: AbortSignal): Promise<string> {
   try {
     const response = await fetch(url, { method: "HEAD", signal });
@@ -79,8 +89,10 @@ export async function POST(
     // Update session metadata and index it
     await getRedis().hset('sessions:metadata', sessionId, JSON.stringify({
       filename: file.name,
-      createdAt: Date.now()
+      createdAt: Date.now(),
+      status: "processing"
     }));
+
     await getRedis().sadd('sessions:index', sessionId);
 
     const totalPages = endPage - startPage + 1;
@@ -112,23 +124,27 @@ export async function POST(
       signal.throwIfAborted();
       await scan(pageNum);
       scannedPages.push(pageNum);
-      await getRedis().set(`${sessionId}/progress`, JSON.stringify({ 
-        stage: "SCANNING", 
-        cursor: pageNum, 
-        progress: Math.floor((scannedPages.length / pagesToScan.length) * 100), 
-        details: "" 
+      await getRedis().set(`${sessionId}/progress`, JSON.stringify({
+        stage: "SCANNING",
+        cursor: pageNum,
+        progress: Math.floor((scannedPages.length / pagesToScan.length) * 100),
+        details: ""
       }));
     }));
 
     if (mode === SESSION_MODES.NAMES) {
       console.log(`[POST NAMES] Starting extraction...`);
 
-      const [_sheet, extract] = await useForeignNamesExtractor({ readingMemoryLimit: 20 });
-      sheetFile = { pdfFilename: file.name, sheet: _sheet };
+      const [_sheet, extract] = await useForeignNamesExtractor({ readingMemoryLimit: 1 });
+      if (!sheetFile || !sheetFile.sheet) {
+        sheetFile = { pdfFilename: file.name, sheet: [] };
+      } else {
+        sheetFile.pdfFilename = file.name;
+      }
       console.log(`[POST NAMES] Initial sheet from extractor: ${sheetFile.sheet.length} rows`);
 
       const seenNames = new Set<string>(); // Track normalized names we've already added
-      
+
       const pagesToProcess = [];
       for (let i = startPage; i <= endPage; i++) {
         if (!processedPages.includes(i)) pagesToProcess.push(i);
@@ -139,7 +155,7 @@ export async function POST(
         const image = images(i) as string;
         // Pass a snapshot of the current sheet to maintain context without image bloat
         const lines = await extract(i, image, sheetFile.sheet);
-        
+
         const validateLines = await Promise.all(
           lines.map(async line => {
             if (line["الرابط الأول"]) line["الرابط الأول"] = await validateLink(line["الرابط الأول"], signal);
@@ -162,17 +178,17 @@ export async function POST(
         sheetFile.sheet.push(...uniqueLines);
         sheetFile.sheet.sort((a, b) => (a['رقم الصفحة'] - b['رقم الصفحة']) || (a['رقم النص'] - b['رقم النص']));
         processedPages.push(i);
-        
-        // Update Redis (less frequent saves of the full sheet could be done here, 
-        // but for now let's keep it per-page or batch it. 
-        // Actually, with parallel execution, we should probably save after each page finishes 
-        // or at the end of the whole run for better performance.)
+
+        // Update Redis
         await getRedis().set(`${sessionId}/state`, JSON.stringify({ processedPages, mode }), "EX", 60 * 60 * 5);
-        await getRedis().set(`${sessionId}/progress`, JSON.stringify({ 
-          stage: "EXTRACTING", 
-          cursor: i, 
-          progress: Math.round(((processedPages.length / totalPages) * 100)), 
-          details: JSON.stringify(uniqueLines) 
+        if (uniqueLines.length > 0) {
+          await getRedis().set(`${sessionId}/sheet`, JSON.stringify(sheetFile), "EX", 60 * 60 * 5);
+        }
+        await getRedis().set(`${sessionId}/progress`, JSON.stringify({
+          stage: "EXTRACTING",
+          cursor: i,
+          progress: Math.round(((processedPages.length / totalPages) * 100)),
+          details: JSON.stringify(uniqueLines)
         }));
       }));
 
@@ -184,8 +200,12 @@ export async function POST(
 
     if (mode === SESSION_MODES.LINES) {
 
-      const [_sheet, extract] = await useSheeter({ readingMemoryLimit: 15 });
-      sheetFile = { pdfFilename: file.name, sheet: _sheet };
+      const [_sheet, extract] = await useSheeter({ readingMemoryLimit: 1 });
+      if (!sheetFile || !sheetFile.sheet) {
+        sheetFile = { pdfFilename: file.name, sheet: [] };
+      } else {
+        sheetFile.pdfFilename = file.name;
+      }
       const pagesToProcess = [];
       for (let i = startPage; i <= endPage; i++) {
         if (!processedPages.includes(i)) pagesToProcess.push(i);
@@ -200,11 +220,14 @@ export async function POST(
         sheetFile.sheet.sort((a, b) => (a['رقم الصفحة'] - b['رقم الصفحة']) || (a['رقم النص'] - b['رقم النص']));
         processedPages.push(i);
         await getRedis().set(`${sessionId}/state`, JSON.stringify({ processedPages, mode }), "EX", 60 * 60 * 5);
-        await getRedis().set(`${sessionId}/progress`, JSON.stringify({ 
-          stage: "EXTRACTING", 
-          cursor: i, 
-          progress: Math.round(((processedPages.length / totalPages) * 100)), 
-          details: JSON.stringify(lines) 
+        if (lines.length > 0) {
+          await getRedis().set(`${sessionId}/sheet`, JSON.stringify(sheetFile), "EX", 60 * 60 * 5);
+        }
+        await getRedis().set(`${sessionId}/progress`, JSON.stringify({
+          stage: "EXTRACTING",
+          cursor: i,
+          progress: Math.round(((processedPages.length / totalPages) * 100)),
+          details: JSON.stringify(lines)
         }));
       }));
 
@@ -228,12 +251,18 @@ export async function POST(
     const host = req.headers.get("host") || req.nextUrl.host;
     const sheetUrl = `${protocol}//${host}/api/sessions/${sessionId}`;
 
+    await updateSessionStatus(sessionId, 'completed')
+
     return NextResponse.json({ sheetUrl }, { status: 200 });
 
   } catch (error: any) {
     // Handle client abort
     if (error.name === "AbortError") {
       console.log(`[POST] Client connection aborted for sessionId: ${sessionId}`);
+      await updateSessionStatus(sessionId, 'error')
+      // Force final save before exiting
+      await getRedis().set(`${sessionId}/state`, JSON.stringify({ processedPages, mode }), "EX", 60 * 60 * 5);
+      await getRedis().set(`${sessionId}/sheet`, JSON.stringify(sheetFile), "EX", 60 * 60 * 5);
       return new NextResponse("Client connection aborted", { status: 499 });
     }
 
@@ -342,7 +371,7 @@ export async function DELETE(
   await getRedis().del(`${sessionId}/progress`);
   await getRedis().del(`${sessionId}/sheet`);
   await getRedis().del(`${sessionId}/state`);
-  
+
   // Remove from index
   await getRedis().srem('sessions:index', sessionId);
   await getRedis().hdel('sessions:metadata', sessionId);

@@ -14,7 +14,10 @@ import {
   Table,
   Text,
   RadioCard,
-  Badge
+  Badge,
+  Drawer,
+  Portal,
+  CloseButton
 } from '@chakra-ui/react';
 import { Toaster, toaster } from '@/components/ui/toaster';
 import { FileUpload, Icon } from '@chakra-ui/react';
@@ -74,6 +77,16 @@ export default function Home() {
   useEffect(() => {
     fetchSessions();
   }, []);
+
+  // useEffect(() => {
+  //   const hasActive = sessions.some(
+  //     s => s.status !== 'completed' && s.status !== 'error'
+  //   );
+  //   if (!hasActive || !isProcessing) return;
+
+  //   const interval = setInterval(fetchSessions, 3000);
+  //   return () => clearInterval(interval);
+  // }, [sessions, isProcessing]);
 
   useEffect(() => {
     console.info("PDF.js loaded:", pdfJs?.version);
@@ -194,9 +207,7 @@ export default function Home() {
         params.set('sessionId', sessionId);
         router.push(`${pathname}?${params.toString()}`, { scroll: false });
 
-        // Push a new session
         setSessions(prev => {
-          // Check if session already exists to prevent duplicates
           if (prev.find(s => s.id === sessionId)) return prev;
           return [{ id: sessionId, filename: file.name, createdAt: Date.now() }, ...prev]
         });
@@ -216,7 +227,13 @@ export default function Home() {
     }
   };
 
+  const updateSessionStatus = (id: string | null, status: Session['status']) => {
+    setSessions(prev => prev.map(s => s.id === id ? { ...s, status } : s));
+  };
+
   const handleConvert = async () => {
+    if (!sessionId) return;
+    updateSessionStatus(sessionId, 'processing')
     if (!file) {
       toaster.create({
         title: 'No file selected',
@@ -238,7 +255,6 @@ export default function Home() {
 
     try {
       setIsProcessing(true);
-
       const formData = new FormData();
       formData.append('file', file);
 
@@ -268,14 +284,17 @@ export default function Home() {
       if (request.ok) {
         setSheetUrl(response.sheetUrl);
         setIsDone(true);
+        updateSessionStatus(sessionId, 'completed')
         toaster.create({
-          title: 'تم تفريغ الكتاب بنجاح',
+          title: `تم تفريغ كتاب "${file.name.replace('.pdf', '')}" بنجاح!`,
+          description: `اضغط على زر "تحميل الملف" لتنزيل الملف`,
           type: 'success',
           duration: 3000
         });
       } else {
         // Check for server errors (5xx)
         if (request.status >= 500) {
+          updateSessionStatus(sessionId, 'error')
           toaster.create({
             title: 'خطأ في الخادم',
             description: 'تأكد من اتصالك بالانترنت أو اعد المحاولة لاحقا',
@@ -289,6 +308,7 @@ export default function Home() {
         const { type } = response;
 
         if (type === 'EXCEEDED_QUOTA') {
+          updateSessionStatus(sessionId, 'error')
           toaster.create({
             title: 'الحد اليومي للتفريغ قد تم تجاوزه',
             description: 'الحد اليومي للتفريغ هو 500 صفحة في اليوم',
@@ -296,6 +316,7 @@ export default function Home() {
             duration: 3000
           });
         } else if (type === 'GEMINI_INVALID_INPUT') {
+          updateSessionStatus(sessionId, 'error')
           toaster.create({
             title: 'لا يمكن معالجة هذا الكتاب',
             description: 'استخدم هذا الموقع لحل المشكلة: https://www.ilovepdf.com/repair-pdf',
@@ -303,6 +324,7 @@ export default function Home() {
             duration: 20000
           });
         } else {
+          updateSessionStatus(sessionId, 'error')
           toaster.create({
             title: 'خطأ أثناء التفريغ',
             description: response.details || 'حدث خطأ غير متوقع',
@@ -313,6 +335,7 @@ export default function Home() {
       }
 
     } catch (error: unknown) {
+      updateSessionStatus(sessionId, 'error')
       if (error instanceof Error) {
         // Network error
         if (error.message.includes('fetch') || error.message.includes('Network')) {
@@ -325,6 +348,7 @@ export default function Home() {
         }
         // Other errors
         else {
+          updateSessionStatus(sessionId, 'error')
           toaster.create({
             title: 'حدث خطأ',
             description: error.message,
@@ -341,18 +365,20 @@ export default function Home() {
   };
 
   const handleDownload = async () => {
-    if (!sheetUrl) {
+    if (!sessionId) {
       toaster.create({
-        title: 'No sheet URL available',
+        title: 'لا يوجد جلسة حالية',
         type: 'error',
         duration: 3000
       });
       return;
     }
 
+    const downloadUrl = `/api/sessions/${sessionId}`;
+
     const link = document.createElement('a');
-    link.href = sheetUrl;
-    link.download = file?.name.replace('.pdf', '.xlsx') || 'sheet.xlsx';
+    link.href = downloadUrl;
+    link.download = "extraction.xlsx";
     link.click();
 
     toaster.create({
@@ -423,15 +449,57 @@ export default function Home() {
 
   const handleSelectSession = (id: string) => {
     const params = new URLSearchParams(searchParams.toString());
-    params.set('sessionId', id);
+    const currentSessionId = params.get('sessionId');
+    if (currentSessionId == id) {
+      //remove it from parmas
+      params.delete('sessionId');
+      handleReset();
+      return;
+    } else {
+      params.set('sessionId', id);
+    }
     router.push(`${pathname}?${params.toString()}`, { scroll: false });
+    console.log('Select a session', id);
     // Reset local state to trigger rehydration
     setSessionId(null);
     setFile(null);
   };
 
+
+
+  const HistoryDrawer = () => {
+    return (
+      <Drawer.Root placement={{ mdDown: "bottom", md: "start" }} modal={false}>
+        <Drawer.Trigger asChild>
+          <Button variant="solid" size="sm" width={'fit-content'}>
+            السجلات
+          </Button>
+        </Drawer.Trigger>
+        <Portal>
+          <Drawer.Backdrop />
+          <Drawer.Positioner>
+            <Drawer.Content>
+              <Sidebar
+                currentSessionId={sessionId}
+                sessions={sessions}
+                isLoading={isSessionsLoading}
+                onSelectSession={handleSelectSession}
+                onDeleteSession={handleDeleteSession}
+                onNewSession={handleReset}
+              />
+              <Drawer.CloseTrigger asChild>
+                <CloseButton size="sm" />
+              </Drawer.CloseTrigger>
+            </Drawer.Content>
+          </Drawer.Positioner>
+        </Portal>
+      </Drawer.Root>
+    )
+  }
+
+
   return (
-    <HStack gap={0} alignItems="stretch" width="100%" minH="100vh" bg="black" >
+    <HStack gap={2} alignItems="stretch" width="100%" minH="100vh" bg="black" >
       <Sidebar
         currentSessionId={sessionId}
         sessions={sessions}
@@ -440,8 +508,8 @@ export default function Home() {
         onDeleteSession={handleDeleteSession}
         onNewSession={handleReset}
       />
-      <Box flex="1" overflowY="auto" height="100vh">
-        <Container fluid minH={'100vh'} width={'100%'} centerContent={true} pt={{ base: 6, md: 8 }}>
+      <Box flex="1" overflowY={{ base: 'auto', lg: 'hidden' }} height={{ base: 'auto', lg: '100vh' }} minH="100vh">
+        <Container fluid height={{ base: 'auto', lg: '100vh' }} width={'100%'} display="flex" flexDirection="column" p={{ base: 1, md: 8 }}>
           <Script
             src="/pdfjs-5.4.530-dist/build/pdf.mjs"
             type="module"
@@ -458,12 +526,13 @@ export default function Home() {
             gap={{ base: 4, md: 10 }}
             alignItems={'stretch'}
             flexDirection={{ base: 'column', lg: 'row' }}
-            minH={{ base: 'auto', lg: '90vh' }}
+            flex="1"
+            minH={{ base: 'auto', lg: 0 }}
           >
             <VStack
               gap={5}
               width={{ base: '100%', lg: '40vh' }}
-              minH={{ base: 'auto', lg: '100%' }}
+              flexShrink={0}
               justifyContent={'space-between'}
             >
               {file == null && <FileUpload.Root
@@ -495,9 +564,9 @@ export default function Home() {
               {file != null && <Button colorPalette={'blue'} onClick={handleConvert} loading={isUploading} variant="surface" width={'100%'}>
                 {(currentProgress > 0 && !isProcessing && !isDone) ? "استئناف التفريغ" : "فرغ النص"}
               </Button>}
-              {file != null && !isProcessing && <Button colorPalette={'gray'} onClick={handleReset} loading={isUploading} variant="outline" width={'100%'}>
+              {/* {file != null && !isProcessing && <Button colorPalette={'gray'} onClick={handleReset} loading={isUploading} variant="outline" width={'100%'}>
                 رفع كتاب آخر
-              </Button>}
+              </Button>} */}
               {totalPages > 0 &&
                 <HStack
                   dir="rtl"
@@ -521,7 +590,7 @@ export default function Home() {
                 </HStack>
               }
               <RadioCard.Root value={selectedMode} width="100%">
-                <HStack align="stretch" flexDirection={{ base: 'column', sm: 'row' }}>
+                <HStack align="stretch" flexDirection={{ base: 'column', sm: 'row' }} paddingBottom={4}>
                   {modes.map((mode) => (
                     <RadioCard.Item key={mode.value} value={mode.value} flex="1" cursor={"pointer"}>
                       <RadioCard.ItemHiddenInput />
@@ -533,17 +602,22 @@ export default function Home() {
                 </HStack>
               </RadioCard.Root>
             </VStack>
-            <VStack gap={5} flex={1} width={{ base: '100%', lg: 'auto' }}>
+            <VStack gap={5} flex={1} width={{ base: '100%', lg: 'auto' }} minH={{ base: 'auto', lg: 0 }} overflowY={{ base: 'visible', lg: 'hidden' }}>
               <Box
-                height={{ base: '50vh', md: '60vh', lg: '100%' }}
+                flex={{ base: 'none', lg: 1 }}
+                minH={{ base: '50vh', lg: 0 }}
+                maxH={{ base: '60vh', lg: 'none' }}
+                height={{ base: '50vh', lg: 'auto' }}
                 width={'100%'}
-                p={{ base: 4, md: 8, lg: 10 }}
+                p={{ base: 2, md: 4, lg: 5 }}
                 border={"2px dashed"}
                 borderColor={"gray.800"}
                 borderRadius={5}
-                overflowX={{ base: 'auto', md: 'hidden' }}
+                overflow="auto"
+                css={{ '&::-webkit-scrollbar': { display: 'none' }, scrollbarWidth: 'none' }}
               >
-                {progressDetails !== null && <Table.ScrollArea height={'100%'} width={'100%'} p={0}>
+                {progressDetails !== null && <Table.ScrollArea
+                  height={'auto'} width={'auto'} p={0}>
                   <Table.Root striped dir="rtl" stickyHeader>
                     {selectedMode === SESSION_MODES.NAMES && <Table.Header>
                       <Table.Row>
@@ -602,7 +676,8 @@ export default function Home() {
                 <HStack
                   gap={5}
                   width={'100%'}
-                  flexDirection={{ base: 'column-reverse', md: 'row' }}
+                  flexShrink={0}
+                  flexDirection={{ base: 'column-reverse', xl: 'row' }}
                   justifyContent={{ base: 'center', md: 'space-between' }}
                 >
                   <VStack alignItems={'flex-start'} width={{ base: '100%', md: 'auto' }}>

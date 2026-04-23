@@ -62,7 +62,7 @@ export async function useScanner(
 }
 
 export async function useSheeter({ readingMemoryLimit }: { readingMemoryLimit: number } = { readingMemoryLimit: 10 }): Promise<[LineRow[], (key: number, image: string, previousResults?: any[]) => Promise<LineRow[]>]> {
-  const conversation: ReadingMemory = new ReadingMemory(readingMemoryLimit ?? 10);
+  const conversation: ReadingMemory = new ReadingMemory(readingMemoryLimit ?? 1);
   const sheet: LineRow[] = [];
   const instructions = await fs.readFile(path.join('src/lib/prompts', 'sheetify.md'), 'utf-8');
 
@@ -183,7 +183,7 @@ export async function useSheeter({ readingMemoryLimit }: { readingMemoryLimit: n
 }
 
 export async function useForeignNamesExtractor({ readingMemoryLimit }: { readingMemoryLimit: number } = { readingMemoryLimit: 10 }): Promise<[ForeignNameRow[], (key: number, image: string, previousResults?: any[]) => Promise<ForeignNameRow[]>]> {
-  const conversation: ReadingMemory = new ReadingMemory(readingMemoryLimit ?? 10);
+  const conversation: ReadingMemory = new ReadingMemory(readingMemoryLimit ?? 1);
   const sheet: ForeignNameRow[] = [];
   const instructions = await fs.readFile(path.join('src/lib/prompts', 'foreign-name-extraction.md'), 'utf-8');
 
