@@ -32,6 +32,7 @@ import Sidebar from '@/components/Sidebar';
 
 export const dynamic = "force-dynamic";
 
+const draftFiles = new Map<string, File>();
 
 export default function Home() {
   const [file, setFile] = useState<File | null>(null);
@@ -214,12 +215,19 @@ export default function Home() {
 
   const handleFileChange = async (details: { acceptedFiles: File[] }) => {
     const file = details.acceptedFiles[0];
+    if (!file || !pdfJs) return;
+    // setIsUploading(true);
+
+
     if (file && pdfJs) {
       try {
         setIsUploading(true);
-        const { sessionId } = await fetch(`/api/sessions`, { method: "POST" }).then(res => res.json());
+
+        const draftId = crypto.randomUUID();
+        draftFiles.set(draftId, file);
+
         const pdf = await pdfJs.getDocument({ data: await file.arrayBuffer() }).promise;
-        setSessionId(sessionId);
+        setSessionId(draftId);
         setTotalPages(pdf.numPages);
         setEndPage(pdf.numPages);
         pdf.destroy();
@@ -229,12 +237,12 @@ export default function Home() {
 
         // Update URL with session ID
         const params = new URLSearchParams(searchParams.toString());
-        params.set('sessionId', sessionId);
+        params.set('sessionId', draftId);
         router.push(`${pathname}?${params.toString()}`, { scroll: false });
 
         setSessions(prev => {
-          if (prev.find(s => s.id === sessionId)) return prev;
-          return [{ id: sessionId, filename: file.name, createdAt: Date.now() }, ...prev]
+          if (prev.find(s => s.id === draftId)) return prev;
+          return [{ id: draftId, filename: file.name, createdAt: Date.now() }, ...prev]
         });
 
         setIsUploading(false);
@@ -276,7 +284,60 @@ export default function Home() {
       });
     }
 
+
+    let acctiveSessionId = sessionId;
+
+    if (isUnsavedSession) {
+      const draftFil = draftFiles.get(sessionId);
+      if (!draftFil) {
+        toaster.create({ title: 'الملف غير موجود', type: 'error', duration: 3000 });
+        return;
+      }
+      try {
+        const formData = new FormData();
+        formData.append('file', draftFil);
+        const { sessionId: newSessionId } = await fetch(`/api/sessions`, {
+          method: "POST",
+          body: formData
+        }).then(res => res.json());
+
+        acctiveSessionId = newSessionId;
+
+        // Update URL with session ID
+        const params = new URLSearchParams(searchParams.toString());
+        params.set('sessionId', newSessionId);
+        router.push(`${pathname}?${params.toString()}`, { scroll: false });
+
+        setSessions(prev => prev.map(s =>
+          s.id === sessionId
+            ? { ...s, id: newSessionId }
+            : s
+        ));
+
+        // updateSessionStatus(newSessionId, 'completed')
+
+        draftFiles.delete(sessionId);
+        setSessionId(newSessionId);
+        setIsUnsavedSession(false);
+
+      } catch (error) {
+        if (error instanceof Error) {
+          toaster.create({
+            title: 'خطأ في إنشاء الجلسة',
+            description: error.message,
+            type: 'error',
+            duration: 3000,
+          });
+        }
+      }
+    }
+
+
+
     setIsUploading(true);
+
+    // const { sessionId: newSessionId } = await fetch(`/api/sessions`, 
+    //   { method: "POST" }).then(res => res.json());
 
     try {
       setIsProcessing(true);
@@ -284,7 +345,7 @@ export default function Home() {
       formData.append('file', file);
 
       const request = await fetch(
-        `/api/sessions/${sessionId}?startPage=${startPage}&endPage=${endPage}&mode=${selectedMode}`,
+        `/api/sessions/${acctiveSessionId}?startPage=${startPage}&endPage=${endPage}&mode=${selectedMode}`,
         {
           method: 'POST',
           body: formData
@@ -312,7 +373,7 @@ export default function Home() {
       if (request.ok) {
         setSheetUrl(response.sheetUrl);
         setIsDone(true);
-        updateSessionStatus(sessionId, 'completed')
+        updateSessionStatus(acctiveSessionId, 'completed')
         toaster.create({
           title: `تم تفريغ كتاب "${file.name.replace('.pdf', '')}" بنجاح!`,
           description: `اضغط على زر "تحميل الملف" لتنزيل الملف`,
@@ -436,15 +497,14 @@ export default function Home() {
   };
 
   const handleReset = async () => {
-
-    // if (isUnsavedSession && sessionId) {
-    //   await fetch(`/api/sessions/${sessionId}`, { method: 'DELETE' });
-    //   setSessions(prev => prev.filter(s => s.id !== sessionId));
-    // }
+    // If current session is a draft, clean it from the Map too
+    if (sessionId && draftFiles.has(sessionId)) {
+      draftFiles.delete(sessionId);
+      setSessions(prev => prev.filter(s => s.id !== sessionId));
+    }
 
     resetLocalState();
 
-    // Clear URL sessionId
     const params = new URLSearchParams(searchParams.toString());
     params.delete('sessionId');
     const newUrl = params.toString() ? `${pathname}?${params.toString()}` : pathname;
@@ -452,6 +512,13 @@ export default function Home() {
   };
 
   const handleDeleteSession = async (id: string) => {
+    if (draftFiles.has(id)) {
+      draftFiles.delete(id);
+      setSessions(prev => prev.filter(s => s.id !== id));
+      if (id === sessionId) resetLocalState();
+      toaster.create({ title: 'تم مسح الجلسة بنجاح', type: 'success', duration: 3000 });
+      return;
+    }
     try {
       const res = await fetch(`/api/sessions/${id}`, { method: 'DELETE' });
       if (!res.ok) throw new Error('Failed to delete session');
@@ -481,10 +548,10 @@ export default function Home() {
   };
 
   const handleSelectSession = async (id: string) => {
-    if (isUnsavedSession && sessionId && sessionId !== id) {
-      await fetch(`/api/sessions/${sessionId}`, { method: 'DELETE' });
-      setSessions(prev => prev.filter(s => s.id !== sessionId));
-    }
+    // if (isUnsavedSession && sessionId && sessionId !== id) {
+    //   await fetch(`/api/sessions/${sessionId}`, { method: 'DELETE' });
+    //   setSessions(prev => prev.filter(s => s.id !== sessionId));
+    // }
 
     const params = new URLSearchParams(searchParams.toString());
     const currentSessionId = params.get('sessionId');
@@ -493,15 +560,36 @@ export default function Home() {
       params.delete('sessionId');
       handleReset();
       return;
-    } else {
-      params.set('sessionId', id);
     }
+    resetLocalState();
+
+    const draftFil = draftFiles.get(id)
+    if (draftFil) {
+      // Restore from the Map — no server call needed
+      try {
+        const pdf = await pdfJs!.getDocument({ data: await draftFil.arrayBuffer() }).promise;
+        setFile(draftFil);
+        setSessionId(id);
+        setTotalPages(pdf.numPages);
+        setEndPage(pdf.numPages);
+        setIsUnsavedSession(true);
+        pdf.destroy();
+      } catch (error) {
+        toaster.create({
+          title: 'خطأ في تحميل الملف',
+          type: 'error',
+          duration: 3000
+        });
+        params.set('sessionId', id);
+        router.push(`${pathname}?${params.toString()}`, { scroll: false });
+        return;
+      }
+    }
+
+
+    params.set('sessionId', id);
     router.push(`${pathname}?${params.toString()}`, { scroll: false });
     console.log('Select a session', id);
-    // Reset local state to trigger rehydration
-    // resetLocalState();
-    setFile(null)
-    setSessionId(null)
   };
 
 
@@ -750,4 +838,4 @@ export default function Home() {
       </Box>
     </HStack>
   );
-}
+} 
