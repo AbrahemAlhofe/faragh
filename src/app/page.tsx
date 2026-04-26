@@ -32,6 +32,7 @@ import Sidebar from '@/components/Sidebar';
 
 export const dynamic = "force-dynamic";
 
+
 export default function Home() {
   const [file, setFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
@@ -40,6 +41,7 @@ export default function Home() {
   const [endPage, setEndPage] = useState(0);
   const [isDone, setIsDone] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isUnsavedSession, setIsUnsavedSession] = useState(false);
   const [sheetUrl, setSheetUrl] = useState<string | null>(null);
   const [pdfViewerCursor, setPdfViewerCursor] = useState(1);
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -114,10 +116,32 @@ export default function Home() {
           setSelectedMode(data.mode);
           setProgressDetails(data.sheet);
 
+          if (data.status === 'completed') {
+            setIsDone(true);
+            setProgress(100);
+          } else if (data.status === 'processing') {
+            setIsProcessing(true);
+            setIsDone(false);
+            setProgress(data.progress || 0);
+          } else {
+            setIsDone(false);
+            setProgress(data.progress || 0);
+          }
+
           if (pdfJs && rehydratedFile) {
             const pdf = await pdfJs.getDocument({ data: await (rehydratedFile as File).arrayBuffer() }).promise;
             setTotalPages(pdf.numPages);
             setEndPage(pdf.numPages);
+            if (data.processedPages && data.processedPages.length > 0 && data.status !== 'completed') {
+              const maxPage = Math.max(...data.processedPages);
+              if (maxPage < pdf.numPages) {
+                setStartPage(maxPage + 1);
+              } else {
+                setStartPage(pdf.numPages);
+              }
+            } else {
+              setStartPage(1);
+            }
             pdf.destroy();
           }
           document.title = `فراغ استوديو | ${data.pdfFilename.replace(".pdf", "")}`
@@ -200,6 +224,7 @@ export default function Home() {
         setEndPage(pdf.numPages);
         pdf.destroy();
         setFile(file);
+        setIsUnsavedSession(true);
         document.title = `فراغ استوديو | ${file.name.replace(".pdf", "")}`
 
         // Update URL with session ID
@@ -265,6 +290,9 @@ export default function Home() {
           body: formData
         }
       );
+
+      // Once execution starts, it's considered saved
+      setIsUnsavedSession(false);
 
       // Try to parse response
       let response;
@@ -390,13 +418,7 @@ export default function Home() {
   };
 
 
-  const handleReset = () => {
-
-    // if(sessionId) {
-    //   await fetch(`/api/sessions/${sessionId}`, {method: 'DELETE'})
-    //   console.log('Start a new session')
-    // }
-
+  const resetLocalState = () => {
     setFile(null);
     setSessionId(null);
     setIsProcessing(false);
@@ -410,6 +432,17 @@ export default function Home() {
     setStartPage(1);
     setEndPage(0);
     setPdfViewerCursor(1);
+    setIsUnsavedSession(false);
+  };
+
+  const handleReset = async () => {
+
+    // if (isUnsavedSession && sessionId) {
+    //   await fetch(`/api/sessions/${sessionId}`, { method: 'DELETE' });
+    //   setSessions(prev => prev.filter(s => s.id !== sessionId));
+    // }
+
+    resetLocalState();
 
     // Clear URL sessionId
     const params = new URLSearchParams(searchParams.toString());
@@ -447,7 +480,12 @@ export default function Home() {
     }
   };
 
-  const handleSelectSession = (id: string) => {
+  const handleSelectSession = async (id: string) => {
+    if (isUnsavedSession && sessionId && sessionId !== id) {
+      await fetch(`/api/sessions/${sessionId}`, { method: 'DELETE' });
+      setSessions(prev => prev.filter(s => s.id !== sessionId));
+    }
+
     const params = new URLSearchParams(searchParams.toString());
     const currentSessionId = params.get('sessionId');
     if (currentSessionId == id) {
@@ -461,8 +499,9 @@ export default function Home() {
     router.push(`${pathname}?${params.toString()}`, { scroll: false });
     console.log('Select a session', id);
     // Reset local state to trigger rehydration
-    setSessionId(null);
-    setFile(null);
+    // resetLocalState();
+    setFile(null)
+    setSessionId(null)
   };
 
 
@@ -672,7 +711,7 @@ export default function Home() {
                   </Table.Root>
                 </Table.ScrollArea>}
               </Box>
-              {totalPages > 0 &&
+              {(totalPages > 0 || isDone || (progressDetails && (progressDetails as any[]).length > 0)) &&
                 <HStack
                   gap={5}
                   width={'100%'}

@@ -100,7 +100,7 @@ export default function Sidebar({ currentSessionId, sessions, isLoading, onSelec
               bg={currentSessionId === session.id ? 'whiteAlpha.100' : 'transparent'}
               _hover={{ bg: 'whiteAlpha.50' }}
               onClick={() => onSelectSession(session.id)}
-              border="2px solid"
+              borderRight="2px solid"
               borderColor={
                 session.status === "completed"
                   ? "green.400"

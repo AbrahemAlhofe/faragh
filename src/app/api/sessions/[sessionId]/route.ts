@@ -44,8 +44,11 @@ export async function POST(
   const { sessionId } = await params;
   const formData = await req.formData();
   const file = formData.get("file") as File;
-  let sheetFile: SheetFile<ForeignNameRow> | SheetFile<LineRow> = { pdfFilename: file.name, sheet: [] };
+  let sheetFile: SheetFile<ForeignNameRow> | SheetFile<LineRow> = { pdfFilename: file?.name || "unknown.pdf", sheet: [] };
   let processedPages: number[] = [];
+
+  console.log(`[POST] file:`, file.name);
+  console.log(`[POST] file:`, file);
 
   const existingSheet = await getRedis().get(`${sessionId}/sheet`);
   if (existingSheet) {
@@ -61,6 +64,9 @@ export async function POST(
     } catch { }
   }
 
+  console.log(`[POST] existingSheet:`, existingSheet);
+  console.log(`[POST] existingState:`, existingState);
+
   if (!file) return NextResponse.json({ error: "No file uploaded" }, { status: 400 });
 
   // Save PDF locally for persistence
@@ -69,6 +75,9 @@ export async function POST(
   const pdfPath = path.join(storageDir, `${sessionId}.pdf`);
   const fileArrayBuffer = await file.arrayBuffer();
   await fs.writeFile(pdfPath, Buffer.from(fileArrayBuffer));
+
+  console.log(`[POST] pdfPath:`, pdfPath);
+  console.log(`[POST] fileArrayBuffer:`, fileArrayBuffer.byteLength);
 
   try {
     // Check abort signal before starting processing
@@ -131,6 +140,8 @@ export async function POST(
         details: ""
       }));
     }));
+
+    if (!mode) return NextResponse.json({ error: "NO mode Selected" }, { status: 400 });
 
     if (mode === SESSION_MODES.NAMES) {
       console.log(`[POST NAMES] Starting extraction...`);

@@ -9,7 +9,7 @@ export async function POST(req: NextRequest) {
         stage: SESSION_STAGES.IDLE,
         cursor: 1,
         progress: 0,
-        details: {}
+        details: []
     };
 
     // Initialize session progress

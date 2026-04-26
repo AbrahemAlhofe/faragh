@@ -14,21 +14,24 @@ export async function GET(
   const sheetData = await getRedis().get(`${sessionId}/sheet`);
   const stateData = await getRedis().get(`${sessionId}/state`);
   const progressData = await getRedis().get(`${sessionId}/progress`);
+  const metadataRaw = await getRedis().hget('sessions:metadata', sessionId);
 
-  if (!sheetData && !stateData) {
-    return NextResponse.json({ error: "Session not found" }, { status: 404 });
+  if (!sheetData && !stateData && !metadataRaw) {
+    return NextResponse.json({ error: "Session not found - status/route.ts" }, { status: 404 });
   }
 
   const sheet = sheetData ? JSON.parse(sheetData) : null;
   const state = stateData ? JSON.parse(stateData) : {};
   const progress = progressData ? JSON.parse(progressData) : null;
+  const metadata = metadataRaw ? JSON.parse(metadataRaw) : { status: "idle", filename: "unknown.pdf" };
 
   return NextResponse.json({
-    pdfFilename: sheet?.pdfFilename || "unknown.pdf",
+    pdfFilename: sheet?.pdfFilename || metadata.filename,
     sheet: sheet?.sheet || [],
     processedPages: state?.processedPages || [],
     mode: state?.mode || "NAMES",
     stage: progress?.stage || "IDLE",
-    progress: progress?.progress || 0
+    progress: progress?.progress || 0,
+    status: metadata.status || "idle"
   }, { status: 200 });
 }
