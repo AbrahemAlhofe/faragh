@@ -20,6 +20,7 @@ export type LineRow = Row & {
 }
 
 export type ForeignNameRow = Row & {
+  ['اللغة']: string;
   ['الإسم بالعربي']: string;
   ['الإسم باللغة الأجنبية']: string;
   ['الرابط الأول']: string;

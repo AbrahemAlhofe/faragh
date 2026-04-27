@@ -186,7 +186,11 @@ export async function POST(
           return true;
         });
 
-        sheetFile.sheet.push(...uniqueLines);
+        if (mode === SESSION_MODES.NAMES) {
+          const sheetFile: SheetFile<ForeignNameRow> = { pdfFilename: file.name, sheet: [] };
+          sheetFile.sheet.push(...uniqueLines);
+        }
+
         sheetFile.sheet.sort((a, b) => (a['رقم الصفحة'] - b['رقم الصفحة']) || (a['رقم النص'] - b['رقم النص']));
         processedPages.push(i);
 
@@ -227,7 +231,10 @@ export async function POST(
         const image = images(i) as string;
         // Pass a snapshot of the current sheet to maintain context without image bloat
         const lines = await extract(i, image, sheetFile.sheet);
-        sheetFile.sheet.push(...lines);
+        if (mode === SESSION_MODES.LINES) {
+          const sheetFile: SheetFile<LineRow> = { pdfFilename: file.name, sheet: [] };
+          sheetFile.sheet.push(...lines);
+        }
         sheetFile.sheet.sort((a, b) => (a['رقم الصفحة'] - b['رقم الصفحة']) || (a['رقم النص'] - b['رقم النص']));
         processedPages.push(i);
         await getRedis().set(`${sessionId}/state`, JSON.stringify({ processedPages, mode }), "EX", 60 * 60 * 5);
@@ -272,7 +279,7 @@ export async function POST(
       console.log(`[POST] Client connection aborted for sessionId: ${sessionId}`);
       await updateSessionStatus(sessionId, 'error')
       // Force final save before exiting
-      await getRedis().set(`${sessionId}/state`, JSON.stringify({ processedPages, mode }), "EX", 60 * 60 * 5);
+      await getRedis().set(`${sessionId}/state`, JSON.stringify({ processedPages }), "EX", 60 * 60 * 5);
       await getRedis().set(`${sessionId}/sheet`, JSON.stringify(sheetFile), "EX", 60 * 60 * 5);
       return new NextResponse("Client connection aborted", { status: 499 });
     }
