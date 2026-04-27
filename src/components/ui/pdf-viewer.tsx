@@ -56,9 +56,9 @@ export default function PDFViewer({ engine, file, cursor = 1 }: { engine: typeof
     }, [pdfDocument, cursor]);
 
     return (
-        <Container width={'15vw'} height={'40vh'} style={{ display: "flex", justifyContent: "center", alignItems: "center", marginTop: '5vh', marginBottom: '5vh' }}>
+        <Container width={{ base: '80vw', md: '20vw' }} height={{ base: '35vh', md: '40vh' }} style={{ display: "flex", justifyContent: "center", alignItems: "center", marginTop: '5vh', marginBottom: '5vh' }}>
             {thumbnail == null && <Spinner />}
-            {thumbnail != null && <img src={thumbnail} style={{ minWidth: '15vw', objectFit: 'contain' }} alt="current page thumbnail" width={'20vw'} height={'40vh'} />}
+            {thumbnail != null && <img src={thumbnail} style={{ width: '100%', height: '100%', objectFit: 'contain' }} alt="current page thumbnail" />}
         </Container>
     );
 }

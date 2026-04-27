@@ -29,6 +29,8 @@ import PDFViewer from '@/components/ui/pdf-viewer';
 import nextJsVersion from 'next/package.json';
 import Script from 'next/script';
 import Sidebar from '@/components/Sidebar';
+import React from 'react';
+import { HistoryDrawer } from '@/components/ui/history-drawer';
 
 export const dynamic = "force-dynamic";
 
@@ -53,6 +55,7 @@ export default function Home() {
   const [pdfJs, setPdfJs] = useState<PDFJs | null>(null);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [isSessionsLoading, setIsSessionsLoading] = useState(true);
+  const [isOpen, setIsOpen] = useState(false);
 
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -101,11 +104,33 @@ export default function Home() {
         try {
           setIsUploading(true);
           const res = await fetch(`/api/sessions/${urlSessionId}/status`);
-          if (!res.ok) throw new Error("Session not found");
+          if (!res.ok) {
+            console.warn("Session not found:", urlSessionId);
+            toaster.create({
+              title: 'الجلسة غير موجودة',
+              description: 'قد تكون محذوفة أو منتهية',
+              type: 'warning',
+              duration: 3000,
+            });
+            setSessions(prev => prev.filter(s => s.id !== urlSessionId));
+            handleReset();
+            return;
+          }
           const data = await res.json();
 
           // Fetch the PDF file
           const pdfRes = await fetch(`/api/sessions/${urlSessionId}/pdf`);
+          if (pdfRes.status === 404) {
+            toaster.create({
+              title: 'ملف PDF غير متاح',
+              type: 'error',
+              duration: 10000,
+              action: {
+                label: 'حذف الجلسة',
+                onClick: () => handleDeleteSession(urlSessionId)
+              }
+            });
+          }
           let rehydratedFile = null;
           if (pdfRes.ok) {
             const blob = await pdfRes.blob();
@@ -114,7 +139,7 @@ export default function Home() {
           }
 
           setSessionId(urlSessionId);
-          setSelectedMode(data.mode);
+          setSelectedMode(data.mode ?? SESSION_MODES.NAMES);
           setProgressDetails(data.sheet);
 
           if (data.status === 'completed') {
@@ -504,6 +529,7 @@ export default function Home() {
     }
 
     resetLocalState();
+    setSelectedMode(SESSION_MODES.NAMES);
 
     const params = new URLSearchParams(searchParams.toString());
     params.delete('sessionId');
@@ -516,7 +542,8 @@ export default function Home() {
       draftFiles.delete(id);
       setSessions(prev => prev.filter(s => s.id !== id));
       if (id === sessionId) resetLocalState();
-      toaster.create({ title: 'تم مسح الجلسة بنجاح', type: 'success', duration: 3000 });
+      toaster.create(
+        { title: `تم مسح جلسة ${file?.name}`, type: 'success', duration: 3000 });
       return;
     }
     try {
@@ -548,15 +575,10 @@ export default function Home() {
   };
 
   const handleSelectSession = async (id: string) => {
-    // if (isUnsavedSession && sessionId && sessionId !== id) {
-    //   await fetch(`/api/sessions/${sessionId}`, { method: 'DELETE' });
-    //   setSessions(prev => prev.filter(s => s.id !== sessionId));
-    // }
-
     const params = new URLSearchParams(searchParams.toString());
     const currentSessionId = params.get('sessionId');
+
     if (currentSessionId == id) {
-      //remove it from parmas
       params.delete('sessionId');
       handleReset();
       return;
@@ -565,7 +587,6 @@ export default function Home() {
 
     const draftFil = draftFiles.get(id)
     if (draftFil) {
-      // Restore from the Map — no server call needed
       try {
         const pdf = await pdfJs!.getDocument({ data: await draftFil.arrayBuffer() }).promise;
         setFile(draftFil);
@@ -574,14 +595,16 @@ export default function Home() {
         setEndPage(pdf.numPages);
         setIsUnsavedSession(true);
         pdf.destroy();
+
+        params.set('sessionId', id);
+        router.push(`${pathname}?${params.toString()}`, { scroll: false });
+
       } catch (error) {
         toaster.create({
           title: 'خطأ في تحميل الملف',
           type: 'error',
           duration: 3000
         });
-        params.set('sessionId', id);
-        router.push(`${pathname}?${params.toString()}`, { scroll: false });
         return;
       }
     }
@@ -594,49 +617,21 @@ export default function Home() {
 
 
 
-  const HistoryDrawer = () => {
-    return (
-      <Drawer.Root placement={{ mdDown: "bottom", md: "start" }} modal={false}>
-        <Drawer.Trigger asChild>
-          <Button variant="solid" size="sm" width={'fit-content'}>
-            السجلات
-          </Button>
-        </Drawer.Trigger>
-        <Portal>
-          <Drawer.Backdrop />
-          <Drawer.Positioner>
-            <Drawer.Content>
-              <Sidebar
-                currentSessionId={sessionId}
-                sessions={sessions}
-                isLoading={isSessionsLoading}
-                onSelectSession={handleSelectSession}
-                onDeleteSession={handleDeleteSession}
-                onNewSession={handleReset}
-              />
-              <Drawer.CloseTrigger asChild>
-                <CloseButton size="sm" />
-              </Drawer.CloseTrigger>
-            </Drawer.Content>
-          </Drawer.Positioner>
-        </Portal>
-      </Drawer.Root>
-    )
-  }
-
-
   return (
     <HStack gap={2} alignItems="stretch" width="100%" minH="100vh" bg="black" >
-      <Sidebar
-        currentSessionId={sessionId}
-        sessions={sessions}
-        isLoading={isSessionsLoading}
-        onSelectSession={handleSelectSession}
-        onDeleteSession={handleDeleteSession}
-        onNewSession={handleReset}
-      />
       <Box flex="1" overflowY={{ base: 'auto', lg: 'hidden' }} height={{ base: 'auto', lg: '100vh' }} minH="100vh">
-        <Container fluid height={{ base: 'auto', lg: '100vh' }} width={'100%'} display="flex" flexDirection="column" p={{ base: 1, md: 8 }}>
+        <Container fluid height={{ base: 'auto', lg: '100vh' }} width={'100%'} display="flex" flexDirection="column" p={{ base: 4, md: 4 }}>
+          <HStack
+            width={'100%'}
+            justifyContent={'flex-start'}>
+            <HistoryDrawer
+              sessionId={sessionId}
+              sessions={sessions}
+              isSessionsLoading={isSessionsLoading}
+              onSelectSession={handleSelectSession}
+              onDeleteSession={handleDeleteSession}
+              onNewSession={handleReset} />
+          </HStack>
           <Script
             src="/pdfjs-5.4.530-dist/build/pdf.mjs"
             type="module"

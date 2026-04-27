@@ -31,10 +31,10 @@ export default function Sidebar({ currentSessionId, sessions, isLoading, onSelec
       bg="gray.950"
       borderRight="1px solid"
       borderColor="gray.800"
-      height="100vh"
-      position="sticky"
+      height="100%"
+      position="relative"
       top="0"
-      display={{ base: 'none', lg: 'flex' }}
+      display="flex"
       flexDirection="column"
       color="white"
     >
@@ -44,16 +44,7 @@ export default function Sidebar({ currentSessionId, sessions, isLoading, onSelec
             <Icon as={LuHistory} boxSize={5} color="fg.muted" />
             <Text fontSize="lg" fontWeight="bold">السجلات</Text>
           </HStack>
-          <IconButton
-            aria-label="New Session"
-            icon={<LuPlus />}
-            size="sm"
-            variant="ghost"
-            colorPalette="blue"
-            onClick={onNewSession}
-          />
         </HStack>
-
         <Button
           onClick={onNewSession}
           variant="solid"
